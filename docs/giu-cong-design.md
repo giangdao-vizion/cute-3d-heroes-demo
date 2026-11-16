@@ -54,9 +54,11 @@ Quái, hòm, cổng phải đi vào vùng nhìn thấy (dưới thanh HUD phía 
 
 ## Cân bằng (mô phỏng bot đơn giản)
 
-Bot chỉ chạy theo hòm, không nhắm quái, chọn thẻ ngẫu nhiên: thua ở đợt 9 sau khoảng 4 phút 20 giây (41k điểm). Người chơi thật nhắm quái và chọn thẻ có tính toán dự kiến trụ được tới đợt 12–15 ở ván đầu, xa hơn khi đã mua nâng cấp vĩnh viễn.
+Mỗi level 2:30 quân thường (đồng hồ đếm ngược, 10 giây cuối chuyển đỏ), hết giờ ra boss, hạ boss xong sang level mới: khoảng 3 phút/level. Trong level quái trâu thêm x1.2 mỗi 30 giây; sang level mới nhảy thêm x1.25 và ra quái dày hơn.
 
-Chỉ số người chơi cộng dồn (thẻ +30% sát thương cộng vào tổng %, không nhân chồng), trần: 5 tia, 11 phát/giây, 30 lính. Máu quái x1.2 mỗi đợt.
+Điểm: quái thường 10, quái tinh anh 30, boss 500, nhân số level và hệ số combo; qua level +500 x level.
+
+Mô phỏng 16-11-2026 (bot đuổi theo hòm và cổng, chọn thẻ ngẫu nhiên), bản trước khi giảm tăng sát thương: trụ tới level 7 trong 20 phút, sát thương lên 69 và điểm 215 triệu. Đã làm cổng +1 sát thương hiếm hơn, bỏ +1 sát thương khỏi hòm, đổi cách tính điểm như trên.
 
 ## Ý tưởng làm tiếp
 

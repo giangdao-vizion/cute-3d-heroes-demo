@@ -55,7 +55,7 @@ const RAR = { common: { w: 10, label: 'Thường' }, rare: { w: 6, label: 'Hiế
 const GATE_TYPES = [
   { t: 'soldier', unit: 'soldier', pct: false, vals: [1, 2, 3], hpPer: 5 },
   { t: 'rate', unit: 'chevron', pct: true, vals: [10, 20], hpPer: 0.5 },
-  { t: 'dmg', unit: 'sword', pct: false, vals: [1], hpPer: 14 },
+  { t: 'dmg', unit: 'sword', pct: false, vals: [1], hpPer: 30, rare: true },
   { t: 'multi', unit: 'arrows', pct: false, vals: [1], hpPer: 22, rare: true },
 ];
 
@@ -704,7 +704,7 @@ export class Defense {
   }
 
   nextWave() {
-    if (this.wave > 0) { this.gateHp = Math.min(this.gateMax, this.gateHp + 3); this.score += 1000 * this.wave; }
+    if (this.wave > 0) { this.gateHp = Math.min(this.gateMax, this.gateHp + 3); this.score += 500 * this.wave; }
     this.wave++; this.waveT = 0; this.bossCalled = false; this.bossDone = false; this.warned10 = false;
     this.toast(`${ic('flag')} ${this.wave}`, '#fff', false, true);
     if (this.wave > this.meta.bestWave && this.meta.bestWave > 0 && this.wave === this.meta.bestWave + 1) this.toast(ic('flag') + ic('trophy'), '#fbbf24', true);
@@ -777,7 +777,7 @@ export class Defense {
     e.anim.play('death', { once: true, clamp: true });
     this.kills++; this.combo++; this.bestCombo = Math.max(this.bestCombo, this.combo);
     const mult = this.comboMult();
-    this.score += Math.round(e.maxHp * 10 * mult); // điểm = máu của mục tiêu x10 x combo
+    this.score += Math.round((e.boss ? 500 : e.elite ? 30 : 10) * this.wave * mult); // điểm theo loại quái x level x combo
     this.ult = Math.min(100, this.ult + (e.boss ? 40 : e.elite ? 6 : 1.3) * this.P.ultGain);
     this.gainXp(e.xp);
     if (e.elite) this.poof(e.root.position, 0xfbbf24);
@@ -874,7 +874,7 @@ export class Defense {
       case 'weapon': {
         const opts = [];
         if (P.multi < 3) opts.push([ic('arrows') + '+1', () => P.multi++]);
-        opts.push([ic('chevron') + '+15%', () => P.ratePct += 15], [ic('sword') + '+1', () => P.dmgAdd++]);
+        opts.push([ic('chevron') + '+15%', () => P.ratePct += 15]);
         if (P.pierce < 5) opts.push([ic('target') + '+1', () => P.pierce++]);
         const [t, f] = pick(opts); f(); this.toast(t, '#67e8f9', true); break;
       }
@@ -903,7 +903,7 @@ export class Defense {
 
   // ---------- Cổng số ----------
   spawnGatePair() {
-    const pool = GATE_TYPES.filter(t => !t.rare || (this.stage() >= 3 && this.P.multi < 5));
+    const pool = GATE_TYPES.filter(t => !t.rare || (this.stage() >= 3 && Math.random() < 0.35 && (t.t !== 'multi' || this.P.multi < 5)));
     const t0 = pick(pool), rest = pool.filter(t => t !== t0), types = [t0, rest.length ? pick(rest) : t0];
     const z = SPAWN_Z;
     const g = { z, sides: [], group: new THREE.Group(), done: false };
