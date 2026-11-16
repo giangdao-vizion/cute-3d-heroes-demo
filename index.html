@@ -93,6 +93,19 @@
   #dBoss .ic { width:42px; height:42px; margin:-10px 0; } #dBoss .bar { flex:1; height:14px; } #dBoss .bar i { background:linear-gradient(90deg,#f97316,#dc2626); }
   .dsquad .ic { width:24px; height:24px; margin:-4px 2px -4px -6px; }
   .dsquad { position:absolute; left:0; top:0; background:#2563eb; color:#fff; font-weight:800; font-size:14px; padding:0 8px; border-radius:99px; border:2px solid #fff; }
+  .dcount { position:absolute; top:calc(68px + env(safe-area-inset-top)); right:14px; display:flex; align-items:center; gap:2px; background:rgba(43,35,64,.75); color:#fff; padding:1px 10px 1px 4px; border-radius:99px; font:800 16px/26px 'Baloo 2', system-ui; }
+  .dcount .ic { width:26px; height:26px; } .dcount .ic.sm { width:22px; height:22px; }
+  .dcount.hot { background:#dc2626; animation:pulse .6s infinite alternate; }
+  #dTray { position:absolute; left:10px; bottom:calc(70px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:6px; align-items:center; pointer-events:auto; }
+  #dTray.pop .tcard { animation:trayIn .35s ease-out; }
+  @keyframes trayIn { from { transform:translateX(-70px); opacity:0; } }
+  .tlv { position:relative; width:40px; height:40px; } .tlv .ic { width:40px; height:40px; }
+  .tlv span { position:absolute; right:-6px; bottom:-2px; background:#ef4444; color:#fff; border:2px solid #fff; border-radius:99px; font-size:11px; font-weight:800; padding:0 5px; }
+  .tcard { position:relative; width:60px; height:60px; border-radius:16px; border:3px solid #cbd5e1; background:rgba(255,250,242,.92); padding:0; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,.25); touch-action:none; }
+  .tcard.rare { border-color:#60a5fa; } .tcard.epic { border-color:#a855f7; background:rgba(250,245,255,.95); }
+  .tcard .ic { width:44px; height:44px; margin-top:-4px; }
+  .tcard b { position:absolute; left:50%; bottom:-7px; transform:translateX(-50%); background:#2b2340; color:#fff; font:800 12px 'Baloo 2', system-ui; padding:0 6px; border-radius:99px; white-space:nowrap; }
+  .tcard:active { transform:scale(.92); }
   #dHint { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); font-size:42px; opacity:0; text-shadow:0 3px 8px rgba(0,0,0,.4); }
   #dHint.on { animation:hint 1.2s ease-in-out infinite alternate; opacity:1; }
   @keyframes hint { from { transform:translateX(-90%); } to { transform:translateX(-10%); } }
@@ -115,7 +128,11 @@
   .dcrate .ic { width:24px; height:24px; margin:-5px 1px -5px -8px; }
   .dcrate { position:absolute; left:0; top:0; background:rgba(120,72,30,.9); color:#fff; font-size:13px; padding:0 7px; border-radius:8px; border:2px solid #facc15; white-space:nowrap; }
   .hpbar.elite { width:50px; } .hpbar.elite i { background:#f59e0b; }
-  .dmg.big { font-size:24px; }
+  .hpnum { position:absolute; left:0; top:0; min-width:20px; padding:0 6px; border-radius:9px; background:rgba(30,24,48,.78); color:#fff; font:800 14px/18px 'Baloo 2', system-ui; text-align:center; border:1.5px solid rgba(255,255,255,.85); white-space:nowrap; }
+  .hpnum.elite { background:#b45309; font-size:16px; } .hpnum.boss { background:#dc2626; font-size:20px; line-height:24px; padding:0 10px; }
+  .dgatehp { position:absolute; left:0; top:0; padding:0 10px; border-radius:10px; background:#1d4ed8; color:#fff; font:800 18px/24px 'Baloo 2', system-ui; border:2px solid #fff; }
+  #dBossHp { font-size:16px; font-weight:800; min-width:36px; }
+  .dmg.big { font-size:24px; } .dmg.sm { font-size:15px; opacity:.95; }
   #dmodal { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(43,35,64,.45); z-index:8; padding:12px; }
   .dbox { background:var(--card); border-radius:24px; padding:18px 18px 20px; width:min(400px,100%); max-height:94vh; overflow:auto; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,.3); }
   .dbig { font-size:64px; line-height:1.1; } .dbig .ic { width:96px; height:96px; }
@@ -193,10 +210,12 @@
     <div class="dscore"><div id="dScore">0</div><small id="dBest"><img class="ic" src="img/icons/trophy.webp" alt=""><span id="dBestN"></span></small></div>
     <div class="dright"><div class="dwave" id="dWaveRing"><img class="ic" src="img/icons/flag.webp" alt=""><span id="dWave"></span></div><div class="dlvl"><img class="ic" src="img/icons/gem.webp" alt=""><span id="dLv"></span></div></div>
   </div>
+  <div class="dcount" id="dCount"></div>
   <div class="dxp"><i id="dXp"></i></div>
   <div id="dCombo"></div>
-  <div id="dBoss" class="hidden"><b id="dBossName"></b><div class="bar"><i id="dBossBar"></i></div></div>
+  <div id="dBoss" class="hidden"><b id="dBossName"></b><div class="bar"><i id="dBossBar"></i></div><span id="dBossHp"></span></div>
   <div class="dsquad" id="dSquad" style="display:none"></div>
+  <div id="dTray" class="hidden"></div>
   <div id="dHint">👆 ↔️</div>
   <button id="dUlt" class="dult"><span id="dUltFill"></span><img class="ic" src="img/icons/star.webp" alt=""></button>
   <button id="dPause" class="dpause">⏸</button>

@@ -21,10 +21,19 @@ Icon: render 3D có viền tối kiểu game mobile, cùng style với nhân v�
 ## Vòng chơi
 
 - **Mỗi 1–3 giây:** né trái phải, nhắm hàng quái, bắn vỡ hòm.
-- **Mỗi 20 giây:** một cặp cổng số trôi tới. Bắn vào cổng để tăng số (cổng đỏ âm bắn mãi sẽ thành xanh), đứng bên nào nhận bên đó. Phải chọn giữa bắn quái và nuôi cổng.
+- **Mỗi 20 giây:** một cặp cổng thưởng trôi tới, mỗi bên một phần thưởng và một số máu. Bắn hết máu thì nhận thưởng và cổng biến mất, đạn lại bay xuyên qua. Không bắn kịp thì cổng trôi qua, không được gì. Phải chọn giữa bắn quái và bắn cổng.
 - **Mỗi 30 giây:** sang đợt mới, quái trâu hơn 20%, mở thêm loại quái.
+- **Lên cấp:** 3 thẻ hiện gọn ở góc trái, game không dừng. Bấm lúc rảnh tay, thẻ chưa chọn thì vẫn nằm đó (số trên ngọc là số lượt chọn đang chờ).
 - **Mỗi 5 đợt:** boss (T-Rex, Khủng long sừng). Hạ boss: chậm thời gian, hồi cổng, thêm 1 thẻ.
 - **Mỗi ván:** thua thì nhận sao, mua nâng cấp vĩnh viễn, ván sau đi xa hơn.
+
+## Máu và sát thương là số nguyên
+
+Số máu chỉ hiện trên đầu quái sau phát trúng đầu tiên (giữ chút bí mật) và ẩn ngay khi quái chết. Hòm và cổng luôn hiện số. Mốc máu: quái yếu đợt 1 có 1 máu, quái mạnh 10, boss vài trăm; hòm quà và cổng thưởng cũng có số. Viên đạn sức mạnh 1 trúng thì số giảm đúng 1, chí mạng x2. Người chơi luôn biết còn bao nhiêu phát nữa là hạ được. Thẻ và cổng tăng sát thương cộng +1 mỗi lần.
+
+## Chỉ bắn trúng thứ đang thấy
+
+Quái, hòm, cổng phải đi vào vùng nhìn thấy (dưới thanh HUD phía trên) mới bị bắn trúng; đạn tắt khi tới mép đó. Mọi cú bắn trúng đều có tia sáng tại chỗ trúng. Đạn có lõi sáng, quầng sáng và vệt đuôi theo màu từng tướng.
 
 ## Các hệ thống
 
