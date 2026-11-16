@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Icon studio – render icon game từ model 3D</title>
+<!-- Công cụ nội bộ: render model CC0 (Quaternius, KayKit) và hình tự dựng thành icon PNG có viền kiểu game mobile.
+     Mở qua server ở thư mục cute-3d-demo: http://localhost:8790/tools/icon-studio.html
+     Kết quả nằm trong window.__icons (id -> dataURL); bấm "Tải tất cả" để lưu từng file. -->
+<style>
+  body { margin:0; font-family:system-ui; background:#3a3352; color:#fff; }
+  #grid { display:flex; flex-wrap:wrap; gap:10px; padding:14px; }
+  figure { margin:0; width:120px; text-align:center; font-size:12px; }
+  figure img { width:120px; height:120px; background:repeating-conic-gradient(#4a4266 0 25%, #554c74 0 50%) 0 0/20px 20px; border-radius:12px; }
+  button { margin:14px; padding:8px 16px; font-size:15px; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<button id="dl">Tải tất cả</button><span id="status"></span>
+<div id="grid"></div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+const SIZE = 512, OUT = 256;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setSize(SIZE, SIZE); renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+const pmrem = new THREE.PMREMGenerator(renderer);
+const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const loader = new GLTFLoader();
+const load = url => new Promise((res, rej) => loader.load(url, res, undefined, rej));
+
+// ---------- Hình tự dựng (CC0, tự vẽ bằng code) ----------
+const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.32, metalness: 0.15, ...o });
+const extrude = (shape, depth, m) => {
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: depth * 0.35, bevelSize: depth * 0.3, bevelSegments: 4, curveSegments: 18 });
+  g.center(); return new THREE.Mesh(g, m);
+};
+const poly = pts => { const s = new THREE.Shape(); pts.forEach(([x, y], i) => i ? s.lineTo(x, y) : s.moveTo(x, y)); s.closePath(); return s; };
+const PROC = {
+  bolt: (c = 0xffc928) => extrude(poly([[0.15, 1], [-0.55, -0.05], [-0.05, -0.05], [-0.25, -1], [0.55, 0.15], [0.05, 0.15], [0.35, 1]]), 0.28, mat(c, { emissive: c, emissiveIntensity: 0.25 })),
+  boltBlue: () => PROC.bolt(0x7cc4ff),
+  chevron: () => {
+    const g = new THREE.Group(), s = poly([[-0.5, 0.7], [0, 0.7], [0.55, 0], [0, -0.7], [-0.5, -0.7], [0.05, 0]]);
+    for (const [x, c] of [[-0.42, 0x38bdf8], [0.42, 0x0ea5e9]]) { const m = extrude(s, 0.3, mat(c)); m.position.x = x; g.add(m); }
+    return g;
+  },
+  burst: () => {
+    const pts = []; for (let i = 0; i < 20; i++) { const r = i % 2 ? 0.48 : 1, a = i / 20 * Math.PI * 2 + 0.16; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+    const g = new THREE.Group();
+    g.add(extrude(poly(pts), 0.22, mat(0xef4444)));
+    const inner = extrude(poly(pts.map(([x, y]) => [x * 0.55, y * 0.55])), 0.22, mat(0xffd23f, { emissive: 0xffa500, emissiveIntensity: 0.3 }));
+    inner.position.z = 0.16; g.add(inner); return g;
+  },
+  snow: () => {
+    const g = new THREE.Group(), m = mat(0x9be7ff, { roughness: 0.15, metalness: 0.1, emissive: 0x2aa9e0, emissiveIntensity: 0.15 });
+    for (let i = 0; i < 6; i++) {
+      const arm = new THREE.Group(); arm.rotation.z = i * Math.PI / 3;
+      const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 1.7, 4, 8), m); b.rotation.z = 0; b.position.y = 0; arm.add(b);
+      for (const [y, l] of [[0.55, 0.42], [0.25, 0.3]]) for (const sg of [-1, 1]) {
+        const t = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, l, 4, 8), m);
+        t.position.set(sg * l * 0.32, y + 0.12, 0); t.rotation.z = -sg * 0.8; arm.add(t);
+      }
+      g.add(arm);
+    }
+    return g;
+  },
+  trophy: () => {
+    const g = new THREE.Group(), gold = mat(0xffc93c, { metalness: 0.75, roughness: 0.22 });
+    const cup = [[0, -0.1], [0.28, -0.08], [0.55, 0.25], [0.68, 0.75], [0.7, 0.95], [0.64, 0.95], [0.6, 0.78], [0, 0.78]].map(([x, y]) => new THREE.Vector2(x, y));
+    const c = new THREE.Mesh(new THREE.LatheGeometry(cup, 40), gold); g.add(c);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 0.45, 20), gold); stem.position.y = -0.32; g.add(stem);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.22, 32), mat(0x8b5a2b)); base.position.y = -0.62; g.add(base);
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.12, 32), gold); plate.position.y = -0.48; g.add(plate);
+    for (const s of [-1, 1]) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.06, 12, 24, Math.PI * 1.2), gold); h.position.set(s * 0.68, 0.5, 0); h.rotation.z = s > 0 ? -Math.PI * 0.6 : Math.PI * 1.6; g.add(h); }
+    const star = extrude(poly(Array.from({ length: 10 }, (_, i) => { const r = i % 2 ? 0.08 : 0.19, a = i / 10 * Math.PI * 2 + Math.PI / 2; return [Math.cos(a) * r, Math.sin(a) * r]; })), 0.05, mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.3 }));
+    star.position.set(0, 0.42, 0.6); g.add(star);
+    return g;
+  },
+  castle: () => {
+    const g = new THREE.Group(), stone = mat(0xc9c1b6, { roughness: 0.6 }), dark = mat(0xa39a8f, { roughness: 0.6 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 1.3, 24), stone); g.add(body);
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, c = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.26, 0.24), stone); c.position.set(Math.cos(a) * 0.55, 0.75, Math.sin(a) * 0.55); c.rotation.y = -a; g.add(c); }
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.12, 24), dark); ring.position.y = 0.6; g.add(ring);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.9, 24), mat(0xe0453a)); roof.position.y = 1.25; g.add(roof);
+    const door = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 20, 1, false, 0, Math.PI), mat(0x6b3f1f)); door.rotation.x = Math.PI / 2; door.rotation.z = Math.PI / 2; door.position.set(0, -0.35, 0.6); g.add(door);
+    const doorB = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.1), mat(0x6b3f1f)); doorB.position.set(0, -0.5, 0.6); g.add(doorB);
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.24, 0.1), mat(0x2b2340)); win.position.set(0, 0.22, 0.6); g.add(win);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5), mat(0x6b3f1f)); pole.position.y = 1.9; g.add(pole);
+    const fl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.03), mat(0x3b82f6)); fl.position.set(0.18, 2.05, 0); g.add(fl);
+    return g;
+  },
+  flag: () => {
+    const g = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 16), mat(0x8b5a2b)); pole.position.x = -0.7; g.add(pole);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), mat(0xffc93c, { metalness: 0.7, roughness: 0.25 })); knob.position.set(-0.7, 1.13, 0); g.add(knob);
+    const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.bezierCurveTo(0.4, 0.15, 0.8, -0.12, 1.3, 0.05); sh.lineTo(1.05, -0.4); sh.lineTo(1.3, -0.85); sh.bezierCurveTo(0.8, -1.0, 0.4, -0.7, 0, -0.85); sh.closePath();
+    const f = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.08, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 3 }), mat(0xef4444));
+    f.position.set(-0.66, 1.0, -0.04); g.add(f);
+    return g;
+  },
+  arrows: () => {
+    const g = new THREE.Group();
+    const one = () => {
+      const a = new THREE.Group();
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 12), mat(0x9a6a3c)); a.add(shaft);
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.36, 4), mat(0xd7dde4, { metalness: 0.7, roughness: 0.25 })); head.position.y = 0.95; a.add(head);
+      for (const s of [-1, 1]) { const fe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.34, 0.03), mat(0xef4444)); fe.position.set(s * 0.1, -0.68, 0); fe.rotation.z = s * 0.35; a.add(fe); }
+      return a;
+    };
+    [-0.45, 0, 0.45].forEach((r, i) => { const a = one(); a.rotation.z = r; a.position.x = -r * 0.3; a.position.z = i === 1 ? 0.1 : 0; g.add(a); });
+    return g;
+  },
+  target: () => {
+    const g = new THREE.Group();
+    [[1, 0xef4444], [0.76, 0xffffff], [0.52, 0xef4444], [0.28, 0xffd23f]].forEach(([r, c], i) => {
+      const d = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.16, 40), mat(c)); d.rotation.x = Math.PI / 2; d.position.z = i * 0.05; g.add(d);
+    });
+    const arrow = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 12), mat(0x9a6a3c)); shaft.position.y = 0.65; arrow.add(shaft);
+    for (const s of [-1, 1]) { const fe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.03), mat(0x22c55e)); fe.position.set(s * 0.09, 1.2, 0); fe.rotation.z = s * 0.35; arrow.add(fe); }
+    arrow.rotation.x = Math.PI / 2 - 0.5; arrow.rotation.z = 0.6; arrow.position.z = 0.2; g.add(arrow);
+    return g;
+  },
+  flame: () => {
+    const fl = s => { const sh = new THREE.Shape(); sh.moveTo(0, 1 * s); sh.bezierCurveTo(0.35 * s, 0.5 * s, 0.75 * s, 0.1 * s, 0.6 * s, -0.4 * s); sh.bezierCurveTo(0.45 * s, -0.85 * s, -0.45 * s, -0.85 * s, -0.6 * s, -0.4 * s); sh.bezierCurveTo(-0.72 * s, 0 * s, -0.4 * s, 0.25 * s, -0.25 * s, 0.55 * s); sh.bezierCurveTo(-0.15 * s, 0.3 * s, 0.05 * s, 0.5 * s, 0, 1 * s); return sh; };
+    const g = new THREE.Group();
+    g.add(extrude(fl(1), 0.25, mat(0xff5a1f, { emissive: 0xff3300, emissiveIntensity: 0.35 })));
+    const m2 = extrude(fl(0.62), 0.25, mat(0xffc928, { emissive: 0xffa000, emissiveIntensity: 0.4 })); m2.position.set(0, -0.2, 0.15); g.add(m2);
+    return g;
+  },
+};
+
+// ---------- Danh sách icon ----------
+// src: file GLB hoặc proc. rot: [x,y,z] độ. head: chỉ lấy phần đầu (nhân vật). anim: clip để tạo dáng.
+const ICONS = [
+  { id: 'tower', proc: 'castle', rot: [12, -20, 0] },
+  { id: 'trophy', proc: 'trophy', rot: [10, -18, 0] },
+  { id: 'flag', proc: 'flag', rot: [0, -20, 0] },
+  { id: 'gem', src: '../models/props/qt_Gem_Pink.glb', rot: [15, 20, 0] },
+  { id: 'skull', src: '../models/props/qt_Skull.glb', rot: [8, 62, 0] },
+  { id: 'flame', proc: 'flame', rot: [0, -20, 0] },
+  { id: 'boss', char: '../models/quaternius/Trex.glb', anim: 'TRex_Idle', head: 0.5, cropX: 0.42, rot: [5, 55, 0] },
+  { id: 'star', src: '../models/props/qt_Star.glb', rot: [5, -20, 0] },
+  { id: 'coin', src: '../models/props/kk_coin_stack_large.glb', rot: [25, -20, 0] },
+  { id: 'soldier', char: '../models/kaykit/Rogue_Hooded.glb', anim: 'Idle', head: 0.4, rot: [6, -22, 0], keep: [] },
+  { id: 'hero', char: '../models/kaykit/Knight.glb', anim: 'Idle', head: 0.4, rot: [6, -22, 0], keep: ['Knight_Helmet'] },
+  { id: 'pet', char: '../models/quaternius/ShibaInu.glb', anim: 'Idle', head: 0.55, cropX: -0.5, rot: [6, -35, 0] },
+  { id: 'sword', src: '../models/props/qt_Sword_Golden.glb', rot: [0, 0, -45], spin: [0, 0, 0] },
+  { id: 'arrows', proc: 'arrows', rot: [0, -15, 0] },
+  { id: 'chevron', proc: 'chevron', rot: [0, -18, 0] },
+  { id: 'target', proc: 'target', rot: [0, -25, 0] },
+  { id: 'burst', proc: 'burst', rot: [0, -18, 0] },
+  { id: 'bomb', src: '../models/props/qt_Bomb.glb', rot: [8, -30, 0] },
+  { id: 'snow', proc: 'snow', rot: [0, -20, 0] },
+  { id: 'swordshield', src: '../models/props/kk_sword_shield_gold.glb', rot: [8, -20, 0] },
+  { id: 'bolt', proc: 'bolt', rot: [0, -18, 0] },
+  { id: 'boltBlue', proc: 'boltBlue', rot: [0, -18, 0] },
+  { id: 'heart', src: '../models/props/qt_Heart.glb', rot: [0, -20, 0] },
+  { id: 'chest', src: '../models/props/kk_chest_gold.glb', rot: [18, -30, 0] },
+  { id: 'shield', src: '../models/props/qt_Shield_Celtic_Golden.glb', rot: [0, -20, 0] },
+  { id: 'potion', src: '../models/props/qt_Potion.glb', rot: [8, -20, 0] },
+];
+
+async function build(def) {
+  let obj, clips = [];
+  if (def.proc) obj = PROC[def.proc]();
+  else {
+    const g = await load(def.char || def.src);
+    obj = def.char ? SkeletonUtils.clone(g.scene) : g.scene;
+    clips = g.animations;
+    if (def.multi) {
+      const grp = new THREE.Group();
+      for (let i = 0; i < def.multi; i++) { const c = g.scene.clone(); const w = new THREE.Group(); w.add(c); w.rotation.z = (i - 1) * 0.35 - Math.PI / 4; grp.add(w); }
+      obj = grp;
+    }
+  }
+  if (def.char && def.keep) {
+    const weaponish = /Sword|Shield|Axe|Mug|Spellbook|Wand|Staff|Crossbow|Knife|Throwable|Hat|Helmet|Cape/;
+    obj.traverse(o => { if (o.isMesh && weaponish.test(o.name)) o.visible = def.keep.includes(o.name) || /Cape/.test(o.name); });
+  }
+  obj.traverse(o => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    for (const m of [].concat(o.material)) { m.envMap = env; m.envMapIntensity = 0.9; if (m.roughness !== undefined) m.roughness = Math.min(m.roughness, 0.55); }
+  });
+  // Tạo dáng nhân vật bằng frame giữa của clip idle.
+  if (clips.length && def.anim) {
+    const mixer = new THREE.AnimationMixer(obj);
+    const clip = clips.find(c => c.name.split('|').pop() === def.anim) || clips[0];
+    mixer.clipAction(clip).play(); mixer.update(clip.duration * 0.3);
+  }
+  const root = new THREE.Group(); root.add(obj);
+  if (def.spin) obj.rotation.set(...def.spin.map(THREE.MathUtils.degToRad));
+  root.rotation.set(...def.rot.map(THREE.MathUtils.degToRad));
+  root.updateMatrixWorld(true);
+  obj.traverse(o => { if (o.isSkinnedMesh) o.skeleton.update(); });
+  const box = new THREE.Box3();
+  root.traverse(o => { if (o.isMesh && o.visible) box.expandByObject(o, true); });
+  if (def.head) box.min.y = box.max.y - (box.max.y - box.min.y) * def.head;
+  if (def.cropX > 0) box.min.x = box.max.x - (box.max.x - box.min.x) * def.cropX;
+  if (def.cropX < 0) box.max.x = box.min.x - (box.max.x - box.min.x) * def.cropX;
+  return { root, box };
+}
+
+function render({ root, box }) {
+  const scene = new THREE.Scene();
+  scene.environment = env;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.2));
+  const key = new THREE.DirectionalLight(0xfff4e0, 2.6); key.position.set(3, 5, 6); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xbfdcff, 2.2); rim.position.set(-5, 3, -4); scene.add(rim);
+  scene.add(root);
+  const center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+  const cam = new THREE.PerspectiveCamera(22, 1, 0.01, 1000);
+  const r = Math.max(size.x, size.y) * 0.5;
+  const dist = r / Math.tan(THREE.MathUtils.degToRad(11)) + size.z * 0.5;
+  cam.position.set(center.x, center.y, center.z + dist); cam.lookAt(center);
+  renderer.setClearColor(0x000000, 0);
+  renderer.render(scene, cam);
+  return outline(renderer.domElement);
+}
+
+// Viền tối dày + bóng đổ nhẹ, kiểu icon game mobile.
+function outline(src) {
+  const pad = 22, inner = OUT - pad * 2;
+  const tmp = document.createElement('canvas'); tmp.width = tmp.height = OUT;
+  const t = tmp.getContext('2d');
+  t.drawImage(src, pad, pad, inner, inner);
+  const sil = document.createElement('canvas'); sil.width = sil.height = OUT;
+  const s = sil.getContext('2d');
+  s.drawImage(tmp, 0, 0); s.globalCompositeOperation = 'source-in'; s.fillStyle = '#2b2340'; s.fillRect(0, 0, OUT, OUT);
+  const out = document.createElement('canvas'); out.width = out.height = OUT;
+  const o = out.getContext('2d');
+  o.save(); o.shadowColor = 'rgba(0,0,0,0.35)'; o.shadowBlur = 8; o.shadowOffsetY = 6;
+  for (let a = 0; a < 24; a++) { const ang = a / 24 * Math.PI * 2; o.drawImage(sil, Math.cos(ang) * 7, Math.sin(ang) * 7); }
+  o.restore();
+  o.drawImage(tmp, 0, 0);
+  return out.toDataURL('image/png');
+}
+
+window.__icons = {};
+const grid = document.getElementById('grid'), status = document.getElementById('status');
+for (const def of ICONS) {
+  try {
+    const url = render(await build(def));
+    window.__icons[def.id] = url;
+    grid.insertAdjacentHTML('beforeend', `<figure><img src="${url}"><figcaption>${def.id}</figcaption></figure>`);
+  } catch (e) { console.error(def.id, e); status.textContent += ' lỗi ' + def.id; }
+}
+window.__done = true;
+document.getElementById('dl').onclick = () => {
+  for (const [id, url] of Object.entries(window.__icons)) { const a = document.createElement('a'); a.href = url; a.download = id + '.png'; a.click(); }
+};
+</script>
+</body>
+</html>
