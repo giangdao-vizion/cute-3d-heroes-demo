@@ -5,6 +5,8 @@ Demo web 3D (Three.js) để xem và chọn nhân vật chibi cho một game ki�
 - **Showroom:** 24 nhân vật đứng trên sân khấu, bấm vào từng con để xem toàn bộ animation, chọn tướng, thú cưng, boss và các loại quái.
 - **Chơi thử:** điều khiển tướng đã chọn, đánh các đợt quái, đợt 5, 10, 15... có boss.
 
+**Bản online:** https://giangdao-vizion.github.io/cute-3d-heroes-demo/ (GitHub Pages, repo `giangdao-vizion/cute-3d-heroes-demo`, public). Cập nhật: commit + `git push`, Pages tự build lại sau khoảng 1 phút.
+
 ## Chạy
 
 Bấm đúp `start.command`, hoặc:
