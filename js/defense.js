@@ -49,6 +49,23 @@ const CARDS = [
   { id: 'wall', fx: '+4', icon: 'tower', name: 'Sửa cổng', desc: '+4 máu cổng tối đa, hồi đầy cổng', rar: 'common', apply: (P, g) => { g.gateMax += 4; g.gateHp = g.gateMax; } },
   { id: 'ult', fx: '+40%', icon: 'star', name: 'Nộ khí', desc: 'Chiêu cuối nạp nhanh hơn 40%', rar: 'rare', max: 3, apply: P => P.ultGain *= 1.4 },
 ];
+// Chỉ số có thể mua bằng vàng trong ván. cur/max để người chơi thấy còn nâng được bao nhiêu.
+const SPLASH_LV = P => P.splash ? Math.round((P.splash - 1.5) / 0.6) + 1 : 0;
+const UPG = [
+  { id: 'dmg', icon: 'sword', name: 'Sát thương', cost: 14, cur: P => P.dmg, max: () => 30, can: P => P.dmg < 30, buy: P => P.dmgAdd++ },
+  { id: 'rate', icon: 'chevron', name: 'Tốc bắn', cost: 10, cur: P => P.rate.toFixed(1), max: () => 11, can: P => P.rate < 11, buy: P => P.ratePct += 15 },
+  { id: 'multi', icon: 'arrows', name: 'Tia đạn', cost: 30, cur: P => P.multi, max: () => 5, can: P => P.multi < 5, buy: P => P.multi++ },
+  { id: 'pierce', icon: 'target', name: 'Xuyên thấu', cost: 22, cur: P => P.pierce, max: () => 4, can: P => P.pierce < 4, buy: P => P.pierce++ },
+  { id: 'crit', icon: 'burst', name: 'Chí mạng', cost: 12, cur: P => Math.round(P.crit * 100) + '%', max: () => '65%', can: P => P.crit < 0.645, buy: P => P.crit = Math.min(0.65, P.crit + 0.1) },
+  { id: 'squad', icon: 'soldier', name: 'Lính', cost: 10, cur: P => P.soldiers, max: () => 30, can: P => P.soldiers < 30, buy: (P, g) => g.addSoldiers(2) },
+  { id: 'sdmg', icon: 'swordshield', name: 'Sức lính', cost: 16, cur: P => P.soldierPow, max: () => 10, can: P => P.soldierPow < 10, buy: P => P.soldierPow++ },
+  { id: 'pet', icon: 'pet', name: 'Thú cưng', cost: 15, need: (P, g) => !!g.pet, cur: P => P.petLv, max: () => 6, can: P => P.petLv < 6, buy: P => P.petLv++ },
+  { id: 'bolt', icon: 'boltBlue', name: 'Sét', cost: 20, cur: P => P.lightning, max: () => 5, can: P => P.lightning < 5, buy: P => P.lightning++ },
+  { id: 'splash', icon: 'bomb', name: 'Nổ lan', cost: 24, cur: P => SPLASH_LV(P), max: () => 4, can: P => SPLASH_LV(P) < 4, buy: P => P.splash = P.splash ? P.splash + 0.6 : 1.5 },
+  { id: 'slow', icon: 'snow', name: 'Băng', cost: 20, cur: P => P.slow ? 1 : 0, max: () => 1, can: P => !P.slow, buy: P => P.slow = 0.35 },
+  { id: 'wall', icon: 'tower', name: 'Cổng', cost: 10, cur: (P, g) => g.gateMax, max: () => 80, can: (P, g) => g.gateMax < 80, buy: (P, g) => { g.gateMax += 4; g.gateHp = g.gateMax; } },
+];
+const UPG_BY = Object.fromEntries(UPG.map(u => [u.id, u]));
 const RAR = { common: { w: 10, label: 'Thường' }, rare: { w: 6, label: 'Hiếm' }, epic: { w: 3, label: 'Sử thi' } };
 
 // Cổng thưởng: bắn hết máu thì nhận thưởng và cổng biến mất. hp = hpPer x giá trị x độ khó đợt.
@@ -138,7 +155,7 @@ export class Defense {
       hud: $('dhud'), modal: $('dmodal'), gateBar: $('dGateBar'), gateText: $('dGateText'), score: $('dScore'),
       best: $('dBest'), wave: $('dWave'), xp: $('dXp'), lv: $('dLv'), combo: $('dCombo'), boss: $('dBoss'),
       bossName: $('dBossName'), bossBar: $('dBossBar'), squad: $('dSquad'), ult: $('dUlt'), ultFill: $('dUltFill'),
-      pause: $('dPause'), bestN: $('dBestN'), tray: $('dTray'), bossHp: $('dBossHp'), count: $('dCount'), flash: $('dFlash'), hint: $('dHint'), waveRing: $('dWaveRing'),
+      pause: $('dPause'), bestN: $('dBestN'), tray: $('dTray'), bossHp: $('dBossHp'), count: $('dCount'), shopBtn: $('dShopBtn'), coins: $('dCoins'), dot: $('dShopDot'), flash: $('dFlash'), hint: $('dHint'), waveRing: $('dWaveRing'),
     };
     const canvas = renderer.domElement;
     // Chuột: tướng theo con trỏ. Cảm ứng: kéo tương đối, ngón tay không che tướng.
@@ -161,13 +178,15 @@ export class Defense {
       const k = e.key.toLowerCase();
       this.keys.add(k);
       if (k === ' ') { e.preventDefault(); this.ultimate(); }
-      if (k === 'p' || k === 'escape') this.togglePause();
+      if (k === 'p' || k === 'escape') { if (this.state === 'shop') this.closeShop(); else this.togglePause(); }
+      if (k === 'u') this.state === 'shop' ? this.closeShop() : this.openShop();
       if (this.state === 'play' && ['1', '2', '3'].includes(k)) this.chooseCard(+k - 1);
     });
     addEventListener('keyup', e => this.keys.delete(e.key.toLowerCase()));
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'play') this.togglePause(); });
     this.el.ult.onclick = () => this.ultimate();
     this.el.pause.onclick = () => this.togglePause();
+    this.el.shopBtn.onclick = () => this.openShop();
     this.onExit = null;
   }
 
@@ -212,7 +231,8 @@ export class Defense {
     this.timeScale = 1; this.slowmo = 0; this.shake = 0; this.over = false; this.pendingLevels = 0;
     this.enemies = []; this.bullets = []; this.crates = []; this.gates = []; this.effects = []; this.floaters = [];
     this.meteors = []; this.soldierUnits = []; this.pool = {}; this.bulletPool = {}; this.boss = null;
-    this.heroX = 0; this.targetX = 0; this.hand = null; this.sparks = 0;
+    this.heroX = 0; this.targetX = 0; this.hand = null; this.sparks = 0; this.trayKey = '';
+    this.coins = 0; this.bought = {};
     this.bossCalled = false; this.bossDone = false; this.warned10 = false;
     this.el.tray.classList.add('hidden');
 
@@ -416,6 +436,8 @@ export class Defense {
       this.action('start');
     }
     if (a === 'exit') this.onExit?.();
+    if (a === 'closeShop') this.closeShop();
+    if (a === 'upg') this.buyUpg(btn.dataset.id);
     if (a === 'buy') {
       const u = META.find(x => x.id === btn.dataset.id), l = this.meta.lv[u.id] || 0;
       if (l < u.max && this.meta.stars >= u.cost(l)) {
@@ -423,6 +445,43 @@ export class Defense {
         if (this.state === 'menu') { await this.newRun(); this.showMenu(); } else this.showGameOver(true);
       }
     }
+  }
+
+  // Bảng chỉ số: xem giá trị hiện tại / tối đa, dùng vàng trong ván để mua thêm. Mở ra thì game tạm dừng.
+  upgCost(u) { return Math.round(u.cost * Math.pow(1.45, this.bought[u.id] || 0)); }
+
+  openShop() {
+    if (this.state !== 'play' || this.over) return;
+    this.state = 'shop';
+    this.renderShop();
+  }
+
+  closeShop() {
+    if (this.state !== 'shop') return;
+    this.state = 'play'; this.el.modal.classList.add('hidden');
+  }
+
+  renderShop() {
+    const P = this.P;
+    const rows = UPG.filter(u => !u.need || u.need(P, this)).map(u => {
+      const can = u.can(P, this), c = this.upgCost(u), ok = can && this.coins >= c;
+      return `<button class="urow" data-a="upg" data-id="${u.id}" ${ok ? '' : 'disabled'} title="${u.name}">
+        <span class="ui">${ic(u.icon)}</span><span class="un">${u.name}</span>
+        <span class="uv"><b>${u.cur(P, this)}</b><small>/${u.max(P, this)}</small></span>
+        <span class="uc">${can ? ic('coin') + c : 'MAX'}</span></button>`;
+    }).join('');
+    this.modal(`<div class="shoph"><span>${ic('coin')} <b>${fmt(this.coins)}</b></span><button data-a="closeShop" class="big">▶</button></div>
+      <div class="ulist">${rows}</div>`);
+  }
+
+  buyUpg(id) {
+    const u = UPG_BY[id];
+    if (!u || this.state !== 'shop' || !u.can(this.P, this)) return;
+    const c = this.upgCost(u);
+    if (this.coins < c) return;
+    this.coins -= c; this.bought[id] = (this.bought[id] || 0) + 1;
+    u.buy(this.P, this);
+    this.renderShop();
   }
 
   saveMeta() { localStorage.setItem(META_KEY, JSON.stringify(this.meta)); }
@@ -433,14 +492,14 @@ export class Defense {
     return `<div class="shop">` + META.map(u => {
       const l = this.meta.lv[u.id] || 0, maxed = l >= u.max, c = u.cost(l);
       return `<button class="buy" data-a="buy" data-id="${u.id}" title="${u.name}: ${u.desc}" ${maxed || this.meta.stars < c ? 'disabled' : ''}>
-        <span class="bi">${ic(u.icon)}</span><span class="bl">${l}/${u.max}</span><span class="bc">${maxed ? 'MAX' : ic('coin') + c}</span></button>`;
+        <span class="bi">${ic(u.icon)}</span><span class="bl">${l}/${u.max}</span><span class="bc">${maxed ? 'MAX' : ic('gem') + c}</span></button>`;
     }).join('') + '</div>';
   }
 
   showMenu() {
     this.el.hud.classList.add('hidden'); this.showHeader(true);
     this.modal(`<div class="dbig">${ic('shield')}</div>
-      <div class="pills"><span>${ic('trophy')} ${fmt(this.meta.best)}</span><span>${ic('flag')} ${this.meta.bestWave}</span><span>${ic('coin')} ${this.meta.stars}</span></div>
+      <div class="pills"><span>${ic('trophy')} ${fmt(this.meta.best)}</span><span>${ic('flag')} ${this.meta.bestWave}</span><span>${ic('gem')} ${this.meta.stars}</span></div>
       ${this.shopHtml()}
       <div class="row"><button data-a="start" class="big">▶</button><button class="alt" data-a="exit" title="Đổi tướng">${ic('hero', 'btn')}</button></div>`);
   }
@@ -625,7 +684,7 @@ export class Defense {
   // Độ khó tăng dần mỗi 30 giây trong level (stage), và nhảy bậc khi sang level mới.
   waveP() { return Math.min(1, this.waveT / WAVE_DUR); }
   stage() { return Math.max(1, (this.wave - 1) * 5 + Math.min(4, Math.floor(this.waveP() * 5)) + 1); }
-  hpMul() { return Math.pow(1.2, this.stage() - 1) * Math.pow(1.25, Math.max(0, this.wave - 1)); }
+  hpMul() { return Math.pow(1.25, this.stage() - 1) * Math.pow(1.35, Math.max(0, this.wave - 1)); }
 
   async getInst(entry, height) {
     const key = entry.id + '|' + (height || '');
@@ -650,7 +709,7 @@ export class Defense {
     const scale = elite ? 1.35 : 1;
     const e = {
       ...inst, entry, def, elite, boss, hp, maxHp: hp, dead: false, deadT: 0, slowT: 0, punch: 0, scale,
-      speed: (boss ? 1.25 : 2.6 * def.spd * Math.min(1.5, 1 + 0.025 * this.stage())) * (elite ? 0.85 : 1),
+      speed: (boss ? 1.25 : 2.6 * def.spd * Math.min(1.7, 1 + 0.04 * this.stage())) * (elite ? 0.85 : 1),
       radius: Math.max(inst.root.userData.radius, 0.35) * scale, phase: Math.random() * 6,
       leak: boss ? 8 : elite ? 3 : 1, xp: boss ? 25 : elite ? 4 : 1,
     };
@@ -675,19 +734,19 @@ export class Defense {
     if (this.bossCalled && this.bossDone) this.nextWave();
     const alive = this.enemies.filter(e => !e.dead).length, st = this.stage();
     // Quái lẻ: nhiều dần trong level, nhiều hơn hẳn ở level sau; lúc đánh boss bớt một nửa.
-    this.spawnAcc += dt * (0.7 + st * 0.24 + (this.wave - 1) * 0.3) * (this.bossCalled ? 0.5 : 1);
+    this.spawnAcc += dt * (0.8 + st * 0.32 + (this.wave - 1) * 0.45) * (this.bossCalled ? 0.5 : 1);
     while (this.spawnAcc >= 1) {
       this.spawnAcc -= 1;
       if (alive < MAX_ALIVE) {
-        const elite = st >= 3 && Math.random() < Math.min(0.15, 0.03 + st * 0.008);
+        const elite = st >= 2 && Math.random() < Math.min(0.22, 0.04 + st * 0.012);
         this.spawnEnemy(this.randomDef(), (Math.random() * 2 - 1) * (HALF - 0.6), SPAWN_Z, { elite });
       }
     }
     // Đạo quân: cả đàn cùng loại đi thành khối.
     this.packT -= dt;
     if (this.packT <= 0 && st >= 2) {
-      this.packT = Math.max(5, 10 - st * 0.25);
-      const def = this.randomDef(), n = Math.min(24, 4 + Math.floor(st * 1.3));
+      this.packT = Math.max(4, 9 - st * 0.3);
+      const def = this.randomDef(), n = Math.min(28, 5 + Math.floor(st * 1.6));
       const cx = (Math.random() * 2 - 1) * (HALF - 2.2);
       for (let i = 0; i < n && alive + i < MAX_ALIVE; i++) {
         const col = i % 4, row = Math.floor(i / 4);
@@ -716,7 +775,7 @@ export class Defense {
     const entry = byId[ids[(this.wave - 1) % ids.length]] || byId.Trex;
     this.toast(`${ic('boss')} ${ic('flag')}${this.wave}`, '#ef4444', false, true);
     this.shake = 1;
-    this.spawnEnemy({ id: entry.id, hp: 1, spd: 1 }, 0, SPAWN_Z + 4, { boss: true, bossMul: 45 * (1 + (this.wave - 1) * 0.3) });
+    this.spawnEnemy({ id: entry.id, hp: 1, spd: 1 }, 0, SPAWN_Z + 4, { boss: true, bossMul: 50 * (1 + (this.wave - 1) * 0.4) });
   }
 
   updateEnemies(dt) {
@@ -775,7 +834,8 @@ export class Defense {
   killEnemy(e) {
     e.dead = true; e.deadT = 0; e.bar.style.display = 'none';
     e.anim.play('death', { once: true, clamp: true });
-    this.kills++; this.combo++; this.bestCombo = Math.max(this.bestCombo, this.combo);
+    this.kills++; this.combo++;
+    this.coins += e.boss ? 60 : e.elite ? 5 : 1; this.bestCombo = Math.max(this.bestCombo, this.combo);
     const mult = this.comboMult();
     this.score += Math.round((e.boss ? 500 : e.elite ? 30 : 10) * this.wave * mult); // điểm theo loại quái x level x combo
     this.ult = Math.min(100, this.ult + (e.boss ? 40 : e.elite ? 6 : 1.3) * this.P.ultGain);
@@ -814,7 +874,7 @@ export class Defense {
   // Lên cấp không dừng game: 3 thẻ nằm gọn ở góc trái, người chơi bấm lúc nào rảnh tay.
   tryCards() {
     if (!this.hand && this.pendingLevels > 0 && !this.over) {
-      const avail = CARDS.filter(c => (!c.max || (this.picked[c.id] || 0) < c.max) && (!c.need || c.need(this.P, this)));
+      const avail = CARDS.filter(c => (!c.need || c.need(this.P, this)) && (!UPG_BY[c.id] || UPG_BY[c.id].can(this.P, this)));
       const hand = [];
       while (hand.length < 3 && avail.length) {
         const c = pickW(avail, x => RAR[x.rar].w);
@@ -827,11 +887,16 @@ export class Defense {
 
   renderTray() {
     const t = this.el.tray;
-    if (!this.hand || this.over) { t.classList.add('hidden'); return; }
-    t.innerHTML = `<div class="tlv">${ic('gem')}${this.pendingLevels > 1 ? `<span>${this.pendingLevels}</span>` : ''}</div>` +
+    if (!this.hand || this.over) { t.classList.add('hidden'); this.trayKey = ''; return; }
+    const key = this.hand.map(c => c.id).join() + '|' + this.pendingLevels;
+    if (key === this.trayKey) return;              // không đổi gì: giữ nguyên, tránh nhấp nháy
+    const isNewHand = this.trayKey.split('|')[0] !== key.split('|')[0];
+    this.trayKey = key;
+    t.innerHTML = `<div class="tlv">${ic('potion')}${this.pendingLevels > 1 ? `<span>${this.pendingLevels}</span>` : ''}</div>` +
       this.hand.map((c, i) => `<button class="tcard ${c.rar}" data-i="${i}" title="${c.name}: ${c.desc}">${ic(c.icon)}<b>${c.fx}</b></button>`).join('');
     t.querySelectorAll('.tcard').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); this.chooseCard(+b.dataset.i); }));
-    t.classList.remove('hidden', 'pop'); void t.offsetWidth; t.classList.add('pop');
+    t.classList.remove('hidden');
+    if (isNewHand) { t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop'); }
   }
 
   chooseCard(i) {
@@ -866,6 +931,7 @@ export class Defense {
   }
 
   openCrate(c) {
+    this.coins += 5;
     c.dead = true; this.scene.remove(c.g); c.label.remove();
     const pos = new THREE.Vector3(c.x, 0, c.z);
     this.poof(pos, 0xfacc15); this.ring(pos, 1.2, 0xfde047, 0.5);
@@ -954,6 +1020,7 @@ export class Defense {
     g.group.remove(s.mesh); s.tex.dispose();
     const pos = new THREE.Vector3(s.x, 0, g.z);
     this.poof(pos, 0x60a5fa); this.ring(pos, 1.4, 0x93c5fd, 0.4);
+    this.coins += 3;
     this.applyGate(s);
   }
 
@@ -1083,7 +1150,7 @@ export class Defense {
     this.modal(`<div class="dbig">${this.newBest ? ic('trophy') : ic('tower') + ic('burst')}</div>
       <div class="dscoreBig">${fmt(this.score)}</div>
       ${this.newBest ? '<div class="newbest">NEW!</div>' : `<div class="gap">${ic('trophy')} ${fmt(this.meta.best)} <small>(-${fmt(gap)})</small></div>`}
-      <div class="stats"><div>${ic('flag')}<b>${this.wave}</b></div><div>${ic('skull')}<b>${fmt(this.kills)}</b></div><div>${ic('flame')}<b>${this.bestCombo}</b></div><div>${ic('coin')}<b>+${this.lastStars}</b></div></div>
+      <div class="stats"><div>${ic('flag')}<b>${this.wave}</b></div><div>${ic('skull')}<b>${fmt(this.kills)}</b></div><div>${ic('flame')}<b>${this.bestCombo}</b></div><div>${ic('gem')}<b>+${this.lastStars}</b></div></div>
       ${this.shopHtml()}
       <div class="row"><button data-a="restart" class="big">↻</button><button class="alt" data-a="exit" title="Đổi tướng">${ic('hero', 'btn')}</button></div>`);
   }
@@ -1213,6 +1280,10 @@ export class Defense {
     const ck = this.combo >= 10 ? this.combo + '|' + m : '';
     if (el.combo.dataset.k !== ck) { el.combo.dataset.k = ck; el.combo.innerHTML = ck ? `${ic('flame')}<b>${this.combo}</b>${m > 1 ? ` <small>×${m.toFixed(1)}</small>` : ''}` : ''; }
     el.ultFill.style.height = this.ult + '%';
+    const cs = fmt(this.coins);
+    if (el.coins.textContent !== cs) el.coins.textContent = cs;
+    const afford = UPG.some(u => (!u.need || u.need(this.P, this)) && u.can(this.P, this) && this.coins >= this.upgCost(u));
+    if (el.dot.hidden === afford) el.dot.hidden = !afford;
     el.ult.classList.toggle('ready', this.ult >= 100);
     if (this.boss) { el.bossBar.style.width = Math.max(0, this.boss.hp / this.boss.maxHp * 100) + '%'; el.bossHp.textContent = Math.max(0, Math.ceil(this.boss.hp)); }
   }

@@ -55,6 +55,14 @@ $('tabDefense').onclick = () => setMode('defense');
 $('again').onclick = () => setMode('game');
 $('back').onclick = () => setMode('gallery');
 
+// Chặn zoom do chạm hai lần / chụm ngón (Safari bỏ qua user-scalable=no) và Ctrl+lăn chuột.
+document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+document.addEventListener('selectstart', e => e.preventDefault());
+document.addEventListener('contextmenu', e => e.preventDefault());
+
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
