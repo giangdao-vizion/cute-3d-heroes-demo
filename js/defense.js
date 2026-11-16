@@ -55,7 +55,7 @@ const RAR = { common: { w: 10, label: 'Thường' }, rare: { w: 6, label: 'Hiế
 const GATE_TYPES = [
   { t: 'soldier', unit: 'soldier', pct: false, vals: [1, 2, 3], hpPer: 5 },
   { t: 'rate', unit: 'chevron', pct: true, vals: [10, 20], hpPer: 0.5 },
-  { t: 'dmg', unit: 'sword', pct: false, vals: [1], hpPer: 30, rare: true },
+  { t: 'dmg', unit: 'sword', pct: false, vals: [1], hpPer: 20 },
   { t: 'multi', unit: 'arrows', pct: false, vals: [1], hpPer: 22, rare: true },
 ];
 
@@ -874,7 +874,7 @@ export class Defense {
       case 'weapon': {
         const opts = [];
         if (P.multi < 3) opts.push([ic('arrows') + '+1', () => P.multi++]);
-        opts.push([ic('chevron') + '+15%', () => P.ratePct += 15]);
+        opts.push([ic('chevron') + '+15%', () => P.ratePct += 15], [ic('sword') + '+1', () => P.dmgAdd++]);
         if (P.pierce < 5) opts.push([ic('target') + '+1', () => P.pierce++]);
         const [t, f] = pick(opts); f(); this.toast(t, '#67e8f9', true); break;
       }
