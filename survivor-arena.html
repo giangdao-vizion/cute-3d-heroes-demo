@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Đấu Trường Sinh Tồn – Cute 3D Heroes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#2b2340; --card:#fffaf2; --accent:#ff7a59; --purple:#7c3aed; }
+  * { box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#9fd8ff; font-family:'Baloo 2',system-ui,sans-serif; color:var(--ink); touch-action:none; }
+  button, a { font:inherit; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  .hidden { display:none !important; }
+
+  #hud { position:fixed; inset:0; z-index:3; pointer-events:none; padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom); color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.35); }
+  .top { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:10px; right:10px; display:grid; grid-template-columns:minmax(100px,1fr) auto minmax(100px,1fr); align-items:start; gap:8px; }
+  .hero { width:min(240px,38vw); padding:7px 10px; border-radius:16px; background:rgba(43,35,64,.78); box-shadow:0 4px 14px rgba(0,0,0,.2); }
+  #heroName { font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar { height:12px; background:rgba(0,0,0,.32); border:2px solid rgba(255,255,255,.9); border-radius:99px; overflow:hidden; }
+  .bar i { display:block; width:100%; height:100%; transition:width .15s; }
+  .hp i { background:linear-gradient(90deg,#22c55e,#4ade80); }
+  #hpText { display:block; margin-top:2px; font-size:12px; font-weight:800; text-align:center; }
+  .timer { min-width:108px; padding:3px 14px; border-radius:99px; background:rgba(43,35,64,.8); text-align:center; font-size:27px; font-weight:800; line-height:1.2; }
+  .timer small { display:block; font-size:11px; line-height:1; opacity:.85; }
+  .score { justify-self:end; padding:5px 10px; border-radius:14px; background:rgba(43,35,64,.75); font-weight:800; text-align:right; }
+  .score span { display:block; white-space:nowrap; }
+  #pause { position:absolute; right:12px; top:calc(82px + env(safe-area-inset-top)); width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
+  .xp { position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); height:14px; border-radius:99px; background:rgba(43,35,64,.58); border:2px solid #fff; overflow:visible; }
+  .xp i { display:block; height:100%; width:0; border-radius:99px; background:linear-gradient(90deg,#8b5cf6,#d8b4fe); transition:width .2s; }
+  #level { position:absolute; left:-2px; top:50%; transform:translateY(-50%); min-width:42px; padding:1px 8px; border-radius:99px; background:#7c3aed; border:2px solid #fff; color:#fff; font-size:13px; font-weight:800; text-align:center; }
+  #hint { position:absolute; left:50%; bottom:15%; transform:translateX(-50%); padding:5px 14px; border-radius:99px; background:rgba(43,35,64,.7); font-size:15px; font-weight:800; white-space:nowrap; transition:opacity .4s; }
+
+  #joystick { position:fixed; z-index:4; width:112px; height:112px; margin:-56px; border-radius:50%; border:3px solid rgba(255,255,255,.7); background:rgba(43,35,64,.22); pointer-events:none; }
+  #stick { position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px; border-radius:50%; background:rgba(255,255,255,.86); box-shadow:0 3px 12px rgba(0,0,0,.25); }
+
+  #modal, #loading { position:fixed; inset:0; z-index:8; display:flex; align-items:center; justify-content:center; padding:14px; background:rgba(43,35,64,.5); touch-action:manipulation; }
+  #loading { z-index:10; flex-direction:column; background:#bfe6ff; font-size:23px; font-weight:800; }
+  #loading .loadbar { width:min(300px,75vw); height:14px; margin-top:10px; border-radius:99px; background:#fff; overflow:hidden; }
+  #loadFill { display:block; width:8%; height:100%; background:var(--accent); transition:width .25s; }
+  #loadText { margin-top:5px; font-size:14px; }
+  .box { width:min(520px,100%); max-height:94vh; padding:20px; overflow:auto; border-radius:24px; background:var(--card); text-align:center; box-shadow:0 20px 55px rgba(0,0,0,.32); }
+  .box h1, .box h2 { margin:0 0 5px; line-height:1.1; }
+  .box h1 { font-size:38px; color:var(--accent); }
+  .box h2 { font-size:30px; }
+  .box p { margin:6px 0 14px; color:#6b6280; }
+  .cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin-top:12px; }
+  .card { min-width:0; min-height:160px; padding:12px 7px; border:3px solid #ddd2c2; border-radius:18px; background:#fff; color:var(--ink); cursor:pointer; box-shadow:0 5px 0 #ddd2c2; }
+  .card:hover, .card:focus-visible { transform:translateY(-3px); border-color:#a78bfa; outline:none; }
+  .card .icon { display:block; font-size:42px; line-height:1.1; }
+  .card b { display:block; margin:5px 0 2px; font-size:17px; }
+  .card small { display:block; color:#6b6280; font-size:13px; line-height:1.25; }
+  .card em { display:inline-block; margin-top:7px; padding:1px 8px; border-radius:99px; background:#efe6ff; color:#6d28d9; font-size:12px; font-style:normal; font-weight:800; }
+  .actions { display:flex; justify-content:center; flex-wrap:wrap; gap:9px; margin-top:15px; }
+  .actions button, .actions a { min-width:128px; padding:9px 18px; border:0; border-radius:14px; background:var(--accent); color:#fff; font-weight:800; font-size:18px; cursor:pointer; text-decoration:none; }
+  .actions .alt { background:#e6dccb; color:var(--ink); }
+  .summary { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin:12px 0; }
+  .summary span { padding:4px 12px; border-radius:99px; background:#fff; border:2px solid #eee3d3; font-weight:800; }
+  #toast { position:fixed; z-index:6; left:50%; top:27%; transform:translateX(-50%); color:#fff; font-size:28px; font-weight:800; text-shadow:0 3px 0 #7c3aed,0 5px 12px rgba(0,0,0,.35); pointer-events:none; opacity:0; white-space:nowrap; }
+  #toast.show { animation:toast 1.5s ease-out; }
+  @keyframes toast { 0%{opacity:0;transform:translate(-50%,10px) scale(.8)} 15%,75%{opacity:1;transform:translate(-50%,0) scale(1)} 100%{opacity:0;transform:translate(-50%,-12px)} }
+  #damageFlash { position:fixed; inset:0; z-index:2; pointer-events:none; box-shadow:inset 0 0 100px 22px rgba(239,68,68,.75); opacity:0; }
+  #damageFlash.on { animation:flash .35s ease-out; }
+  @keyframes flash { from{opacity:1} to{opacity:0} }
+
+  @media (max-width:600px) {
+    .top { grid-template-columns:1fr auto 1fr; }
+    .hero { width:34vw; padding:5px 7px; }
+    #heroName { font-size:13px; }
+    .timer { min-width:86px; padding:3px 9px; font-size:23px; }
+    .score { font-size:13px; padding:4px 7px; }
+    .cards { gap:6px; }
+    .card { min-height:150px; padding:10px 4px; }
+    .card .icon { font-size:35px; }
+    .card b { font-size:15px; }
+    .card small { font-size:11px; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" class="hidden">
+  <div class="top">
+    <div class="hero">
+      <div id="heroName">Anh hùng</div>
+      <div class="bar hp"><i id="hpFill"></i></div>
+      <span id="hpText"></span>
+    </div>
+    <div class="timer"><span id="timer">00:00</span><small>SỐNG SÓT</small></div>
+    <div class="score"><span>☠ <b id="kills">0</b></span><span>◆ <b id="gems">0</b></span></div>
+  </div>
+  <button id="pause" aria-label="Tạm dừng">Ⅱ</button>
+  <div class="xp"><i id="xpFill"></i><span id="level">Cấp 1</span></div>
+  <div id="hint">WASD hoặc kéo để di chuyển</div>
+</div>
+
+<div id="joystick" class="hidden"><div id="stick"></div></div>
+<div id="toast"></div>
+<div id="damageFlash"></div>
+<div id="modal" class="hidden"></div>
+<div id="loading">Đang mở đấu trường…
+  <div class="loadbar"><i id="loadFill"></i></div>
+  <div id="loadText">Đang tải anh hùng</div>
+</div>
+
+<script type="module" src="js/survivor/main.js"></script>
+</body>
+</html>

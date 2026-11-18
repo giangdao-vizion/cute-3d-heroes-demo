@@ -52,6 +52,7 @@ async function setMode(m) {
 $('tabGallery').onclick = () => setMode('gallery');
 $('tabGame').onclick = () => setMode('game');
 $('tabDefense').onclick = () => setMode('defense');
+$('tabSurvivor').onclick = () => { location.href = 'survivor-arena.html'; };
 $('again').onclick = () => setMode('game');
 $('back').onclick = () => setMode('gallery');
 
