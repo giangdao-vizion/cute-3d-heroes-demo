@@ -44,3 +44,5 @@ File GLB lấy từ GitHub: `KayKit-Game-Assets/KayKit-Character-Pack-*-1.0` và
 - `js/engine.js` – tải GLB, chuẩn hoá chiều cao, điều khiển animation, cây/đá trang trí.
 - `img/icons/` – icon 3D của Giữ cổng (WEBP 160px). Tạo lại bằng `tools/icon-studio.html`: mở qua server, xem lưới icon, bấm "Tải tất cả" ra PNG rồi chuyển WEBP (`cwebp -q 88 -resize 160 160`). Model nguồn ở `models/props/`; tháp, cờ, cúp, lửa, sét, bông tuyết, mũi tên, bia, nổ là hình tự dựng bằng code.
 - `js/gallery.js` – showroom. `js/game.js` – game arena. `js/defense.js` – chế độ Giữ cổng. `js/state.js` – lựa chọn lưu trong localStorage.
+- `docs/dau-truong-sinh-ton-design.md` – kế hoạch chi tiết cho game Đấu Trường Sinh Tồn 360°.
+- `docs/y-tuong-game-sinh-ton.md` – backlog các game survival để nghiên cứu và triển khai sau.
