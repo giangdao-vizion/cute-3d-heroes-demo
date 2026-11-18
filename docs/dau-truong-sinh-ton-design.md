@@ -10,7 +10,14 @@ Tạo một game survival roguelite chơi nhanh trên trình duyệt, ưu tiên 
 - Mỗi ván tạo được một bộ kỹ năng khác nhau; thua vẫn nhận sao để mở khóa lâu dài.
 - Tái sử dụng model, animation, renderer và dữ liệu nhân vật hiện có.
 
-Tên file dự kiến: `survivor-arena.html`.
+Trang game: `survivor-arena.html`.
+
+## Trạng thái triển khai
+
+- [x] Lát cắt 1: trang độc lập, di chuyển, camera, quái truy đuổi, tự động tấn công, ngọc XP, chọn nâng cấp, máu, tạm dừng và chơi lại.
+- [ ] Lát cắt 2: timeline 10 phút, toàn bộ kỹ năng, quái tinh anh, tiến hóa và boss.
+- [ ] Lát cắt 3: sảnh game hoàn chỉnh và tiến trình lâu dài.
+- [ ] Lát cắt 4: âm thanh, cân bằng, hướng dẫn và tối ưu thiết bị.
 
 ## 2. Trụ cột trải nghiệm
 
