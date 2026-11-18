@@ -8,7 +8,12 @@ Tài liệu này lưu các ý tưởng chưa triển khai để nghiên cứu sa
 - Mỗi game mở ở một trang HTML riêng và chỉ tải module cần thiết.
 - Model, animation, lựa chọn tướng và một phần tiến trình được dùng chung.
 - Mỗi thẻ game nên có ảnh minh họa, mô tả một câu, thời lượng dự kiến, kỷ lục và nút chơi.
-- Tất cả game phải chạy được trên static hosting và ưu tiên màn hình điện thoại dọc.
+- Tất cả game phải chạy được trên static hosting và **bắt buộc tương thích mobile/phone**.
+- Thiết kế màn hình điện thoại dọc trước, sau đó mới mở rộng cho desktop.
+- Mọi thao tác chính phải dùng được bằng cảm ứng; bàn phím chỉ là phương thức bổ sung.
+- HUD phải hỗ trợ safe area, không tràn ở chiều rộng 360px và không bị bàn tay che thao tác chính.
+- Mục tiêu hiệu năng tối thiểu là 30 FPS trên điện thoại tầm trung; số model và hiệu ứng phải có giới hạn.
+- Mỗi game phải được kiểm thử ít nhất ở viewport 360×640 và 390×844 trước khi hoàn thành.
 
 ## 1. Đoàn Tàu Thoát Hiểm
 
