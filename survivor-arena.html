@@ -27,6 +27,15 @@
   .score { justify-self:end; padding:5px 10px; border-radius:14px; background:rgba(43,35,64,.75); font-weight:800; text-align:right; }
   .score span { display:block; white-space:nowrap; }
   #pause { position:absolute; right:12px; top:calc(82px + env(safe-area-inset-top)); width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
+  #enemyIntro { position:absolute; right:62px; top:calc(82px + env(safe-area-inset-top)); width:min(230px,62vw); padding:8px 10px; border:2px solid rgba(255,255,255,.9); border-radius:16px; background:rgba(255,250,242,.94); color:var(--ink); text-shadow:none; box-shadow:0 7px 20px rgba(43,35,64,.24); opacity:0; transform:translateX(14px) scale(.94); transform-origin:top right; transition:opacity .22s ease,transform .22s ease; }
+  #enemyIntro.show { opacity:1; transform:none; }
+  .enemy-head { display:flex; align-items:center; gap:7px; }
+  .enemy-icon { width:36px; height:36px; display:grid; place-items:center; flex:0 0 auto; border-radius:11px; background:#fee2e2; font-size:22px; }
+  .enemy-title { min-width:0; text-align:left; line-height:1.05; }
+  .enemy-title small { display:block; color:#ef4444; font-size:9px; font-weight:800; letter-spacing:.08em; }
+  .enemy-title b { display:block; overflow:hidden; font-size:15px; text-overflow:ellipsis; white-space:nowrap; }
+  .enemy-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; margin-top:6px; }
+  .enemy-stats span { min-width:0; padding:2px 3px; overflow:hidden; border-radius:99px; background:#f3e8ff; color:#5b526d; font-size:11px; font-weight:800; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
   .xp { position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); height:14px; border-radius:99px; background:rgba(43,35,64,.58); border:2px solid #fff; overflow:visible; }
   .xp i { display:block; height:100%; width:0; border-radius:99px; background:linear-gradient(90deg,#8b5cf6,#d8b4fe); transition:width .2s; }
   #level { position:absolute; left:-2px; top:50%; transform:translateY(-50%); min-width:42px; padding:1px 8px; border-radius:99px; background:#7c3aed; border:2px solid #fff; color:#fff; font-size:13px; font-weight:800; text-align:center; }
@@ -69,6 +78,9 @@
     .hero { width:34vw; padding:5px 7px; }
     #heroName { font-size:13px; }
     .timer { min-width:86px; padding:3px 9px; font-size:23px; }
+    #enemyIntro { right:58px; top:calc(74px + env(safe-area-inset-top)); width:min(215px,60vw); padding:7px 8px; }
+    .enemy-stats { gap:3px; }
+    .enemy-stats span { font-size:10px; padding-inline:2px; }
     .score { font-size:13px; padding:4px 7px; }
     .cards { gap:6px; }
     .card { min-height:150px; padding:10px 4px; }
@@ -94,10 +106,11 @@
       <div class="bar hp"><i id="hpFill"></i></div>
       <span id="hpText"></span>
     </div>
-    <div class="timer"><span id="timer">00:00</span><small>SỐNG SÓT</small></div>
+    <div class="timer"><span id="timer">00:00</span><small id="stage">MÀN 1</small></div>
     <div class="score"><span>☠ <b id="kills">0</b></span><span>◆ <b id="gems">0</b></span></div>
   </div>
   <button id="pause" aria-label="Tạm dừng">Ⅱ</button>
+  <div id="enemyIntro" class="hidden" aria-live="polite"></div>
   <div class="xp"><i id="xpFill"></i><span id="level">Cấp 1</span></div>
   <div id="hint">WASD hoặc kéo để di chuyển</div>
 </div>

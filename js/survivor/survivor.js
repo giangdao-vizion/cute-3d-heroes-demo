@@ -5,8 +5,25 @@ import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower } from 
 
 const ARENA = 27;
 const ENEMY_CAP = 55;
+const STAGE_DURATION = 50;
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
+
+const ENEMY_VARIANTS = {
+  sprout: { entryId:'Enemy', name:'Mầm xanh', icon:'🌱', hp:24, defense:0, speed:1.75, dmg:4, scale:1, gem:1 },
+  sproutBrute: { entryId:'Enemy', name:'Mầm xanh lực sĩ', icon:'🌿', hp:58, defense:2, speed:1.42, dmg:7, scale:1.38, gem:2 },
+  ratScout: { entryId:'Rat', name:'Chuột trinh sát', icon:'🐭', hp:28, defense:0, speed:3.15, dmg:5, scale:1.04, gem:1 },
+  skeletonGuard: { entryId:'Skeleton_Minion', name:'Vệ binh xương', icon:'💀', hp:72, defense:3, speed:1.82, dmg:8, scale:1.12, gem:2 },
+  skeletonRaider: { entryId:'Skeleton_Minion', name:'Xương đột kích', icon:'☠', hp:48, defense:1, speed:2.75, dmg:9, scale:0.94, gem:2 },
+};
+
+const STAGES = [
+  { name:'Mầm non', featured:'sprout', pool:['sprout'], interval:1.55, cap:14 },
+  { name:'Lực sĩ', featured:'sproutBrute', pool:['sprout','sprout','sproutBrute'], interval:1.38, cap:18 },
+  { name:'Trinh sát', featured:'ratScout', pool:['sprout','sproutBrute','ratScout','ratScout'], interval:1.22, cap:22 },
+  { name:'Vệ binh', featured:'skeletonGuard', pool:['sproutBrute','ratScout','skeletonGuard'], interval:1.08, cap:27 },
+  { name:'Đột kích', featured:'skeletonRaider', pool:['ratScout','skeletonGuard','skeletonRaider','skeletonRaider'], interval:0.94, cap:32 },
+];
 
 const UPGRADES = [
   { id:'damage', icon:'⚔', name:'Sức mạnh', desc:'+25% sát thương', max:5, apply:g => { g.power.damage *= 1.25; } },
@@ -18,6 +35,7 @@ const UPGRADES = [
   { id:'health', icon:'♥', name:'Sinh lực', desc:'+30 máu tối đa và hồi đầy', max:5, apply:g => { g.hero.maxHp += 30; g.hero.hp = g.hero.maxHp; } },
   { id:'magnet', icon:'◆', name:'Nam châm', desc:'+35% phạm vi hút ngọc', max:4, apply:g => { g.power.magnet *= 1.35; } },
   { id:'armor', icon:'⬟', name:'Giáp hộ mệnh', desc:'Giảm 12% sát thương nhận', max:4, apply:g => { g.power.armor *= 0.88; } },
+  { id:'range', icon:'◎', name:'Tầm bắn', desc:'+15% tầm bắn', max:5, apply:g => { g.power.range *= 1.15; g.updateRangeRing(); } },
 ];
 
 function easeOutBack(x) {
@@ -109,7 +127,7 @@ export class SurvivorGame {
     const scene = this.scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9fd8ff);
     scene.fog = new THREE.Fog(0x9fd8ff, 28, 62);
-    this.camera = new THREE.PerspectiveCamera(43, innerWidth / innerHeight, 0.1, 160);
+    this.camera = new THREE.PerspectiveCamera(innerHeight > innerWidth ? 50 : 45, innerWidth / innerHeight, 0.1, 160);
     this.sun = addLights(scene, 24);
     this.buildArena();
 
@@ -122,10 +140,13 @@ export class SurvivorGame {
     this.level = 1;
     this.xp = 0;
     this.pendingLevels = 0;
-    this.spawnClock = 0.8;
+    this.stageIndex = 0;
+    this.spawnClock = 1.2;
     this.hintClock = 5;
+    this.currentIntro = null;
+    this.introRemaining = 0;
     this.upgradeLevels = {};
-    this.power = { damage:1, interval:0.72, multi:1, pierce:0, size:1, magnet:1, attackClock:0.4, armor:1 };
+    this.power = { damage:1, interval:0.72, multi:1, pierce:0, size:1, magnet:1, range:6.2, attackClock:0.4, armor:1 };
 
     const heroEntry = byId[selection.hero] || byId.Knight;
     onProgress(0.25, `Đang tải ${heroEntry.name}`);
@@ -136,13 +157,14 @@ export class SurvivorGame {
     this.hero.invulnerable = 0;
     this.hero.anim.play('idle');
     scene.add(this.hero.root);
+    this.updateRangeRing();
 
     onProgress(0.52, 'Đang tải quái');
     await Promise.all(['Enemy','Rat','Skeleton_Minion'].map(id => spawnModel(byId[id])));
     if (runId !== this.runId) return;
 
     onProgress(0.82, 'Chuẩn bị chiến đấu');
-    await Promise.all([this.spawnEnemy('Enemy'), this.spawnEnemy('Enemy'), this.spawnEnemy('Rat')]);
+    await Promise.all([this.spawnEnemy('sprout'), this.spawnEnemy('sprout')]);
     if (runId !== this.runId) return;
 
     this.camera.position.set(0, 13, 10);
@@ -219,22 +241,55 @@ export class SurvivorGame {
     return { entry, root, model, anim, ring, radius, ...stats, hp:stats.hp || 1, maxHp:stats.hp || 1, dead:false };
   }
 
-  async spawnEnemy(id) {
+  updateRangeRing() {
+    if (!this.hero) return;
+    if (this.hero.rangeRing) {
+      this.hero.root.remove(this.hero.rangeRing);
+      this.hero.rangeRing.geometry.dispose();
+    }
+    const rangeRing = new THREE.Mesh(
+      new THREE.RingGeometry(Math.max(0.1, this.power.range - 0.055), this.power.range + 0.055, 72),
+      this.hero.rangeRing?.material || new THREE.MeshBasicMaterial({ color:0xdbeafe, transparent:true, opacity:0.2, depthWrite:false })
+    );
+    rangeRing.rotation.x = -Math.PI / 2;
+    rangeRing.position.y = 0.035;
+    this.hero.root.add(rangeRing);
+    this.hero.rangeRing = rangeRing;
+  }
+
+  variantStats(variant, stageIndex = this.stageIndex) {
+    const cycle = Math.floor(stageIndex / STAGES.length);
+    const scale = 1 + stageIndex * 0.055 + cycle * 0.12;
+    return {
+      hp:Math.round(variant.hp * scale),
+      defense:variant.defense + Math.floor(stageIndex / 4),
+      speed:Math.min(variant.speed * (1 + stageIndex * 0.012), 4.2),
+      dmg:Math.round(variant.dmg * (1 + stageIndex * 0.06)),
+    };
+  }
+
+  async spawnEnemy(variantId) {
     if (!this.scene || this.enemies.filter(e => !e.dead).length >= ENEMY_CAP) return;
     const runId = this.runId;
-    const entry = byId[id] || byId.Enemy;
+    const variant = ENEMY_VARIANTS[variantId] || ENEMY_VARIANTS.sprout;
+    const entry = byId[variant.entryId] || byId.Enemy;
     const model = await spawnModel(entry);
     if (runId !== this.runId || !this.scene) return;
-    const minutes = this.elapsed / 60;
-    const hpScale = 0.56 + minutes * 0.28;
+    const stats = this.variantStats(variant);
     const enemy = this.makeUnit(entry, model, {
       ...entry.stats,
       team:'enemy',
-      hp:Math.max(5, Math.round(entry.stats.hp * hpScale)),
-      speed:Math.min(entry.stats.speed * (0.72 + minutes * 0.025), 4.2),
-      dmg:Math.max(4, Math.round(entry.stats.dmg * (0.72 + minutes * 0.12))),
+      hp:stats.hp,
+      speed:stats.speed,
+      dmg:stats.dmg,
     });
     enemy.maxHp = enemy.hp;
+    enemy.variant = variant;
+    enemy.variantId = variantId;
+    enemy.defense = stats.defense;
+    enemy.gem = variant.gem;
+    enemy.visualScale = variant.scale;
+    enemy.radius *= variant.scale;
     enemy.spawn = 0;
     enemy.hitFlash = 0;
     const heroPos = this.hero?.root.position || tmp.set(0,0,0);
@@ -267,6 +322,7 @@ export class SurvivorGame {
       this.updateEnemies(dt);
       this.updateProjectiles(dt);
       this.updatePickups(dt);
+      this.updateEnemyIntro(dt);
       this.updateCamera(dt);
       this.hintClock -= dt;
       if (this.hintClock <= 0) this.ui.hint.style.opacity = '0';
@@ -309,7 +365,10 @@ export class SurvivorGame {
   }
 
   autoAttack() {
-    const alive = this.enemies.filter(enemy => !enemy.dead);
+    const rangeSq = this.power.range * this.power.range;
+    const alive = this.enemies.filter(enemy =>
+      !enemy.dead && enemy.root.position.distanceToSquared(this.hero.root.position) <= rangeSq
+    );
     if (!alive.length) return;
     alive.sort((a,b) => a.root.position.distanceToSquared(this.hero.root.position) - b.root.position.distanceToSquared(this.hero.root.position));
     const targets = alive.slice(0, Math.min(this.power.multi, alive.length));
@@ -329,12 +388,23 @@ export class SurvivorGame {
       new THREE.MeshBasicMaterial({ color })
     );
     mesh.position.copy(this.hero.root.position);
-    mesh.position.y = 1.05;
+    mesh.position.y = 0.85;
     const glow = new THREE.PointLight(color, 1.8, 3);
     mesh.add(glow);
     this.scene.add(mesh);
+    tmp.copy(target.root.position).sub(this.hero.root.position);
+    tmp.y = 0;
+    if (tmp.lengthSq() < 0.001) tmp.set(0, 0, -1);
+    tmp.normalize();
+    const speed = 14;
+    const curveSign = Math.random() < 0.5 ? -1 : 1;
     this.projectiles.push({
-      mesh, target, speed:15, life:2.4,
+      mesh,
+      velocity:tmp.clone().multiplyScalar(speed),
+      curve:new THREE.Vector3(-tmp.z * curveSign, 0, tmp.x * curveSign).multiplyScalar(1.1),
+      speed,
+      distance:0,
+      maxDistance:this.power.range,
       damage:this.hero.dmg * this.power.damage,
       hits:new Set(), remaining:this.power.pierce,
       radius:radius + 0.18,
@@ -343,42 +413,38 @@ export class SurvivorGame {
 
   updateProjectiles(dt) {
     for (const projectile of this.projectiles) {
-      projectile.life -= dt;
-      let target = projectile.target;
-      if (!target || target.dead) target = this.nearestEnemy(projectile.mesh.position, projectile.hits);
-      projectile.target = target;
-      if (!target || projectile.life <= 0) {
-        this.removeProjectile(projectile);
-        continue;
-      }
-      tmp.copy(target.root.position);
-      tmp.y = target.root.userData.height * 0.48;
-      const distance = projectile.mesh.position.distanceTo(tmp);
-      const step = projectile.speed * dt;
-      if (distance <= step + target.radius + projectile.radius) {
-        this.hitEnemy(target, projectile.damage);
-        projectile.hits.add(target);
-        if (projectile.remaining > 0) {
-          projectile.remaining--;
-          projectile.target = this.nearestEnemy(projectile.mesh.position, projectile.hits);
-        } else {
+      const travel = projectile.speed * dt;
+      const steps = Math.max(1, Math.ceil(travel / 0.32));
+      const stepDt = dt / steps;
+      for (let step = 0; step < steps && !projectile.removed; step++) {
+        projectile.velocity.addScaledVector(projectile.curve, stepDt);
+        tmp.copy(projectile.velocity).multiplyScalar(stepDt);
+        const remainingDistance = projectile.maxDistance - projectile.distance;
+        if (remainingDistance <= 0) {
           this.removeProjectile(projectile);
+          break;
         }
-      } else {
-        projectile.mesh.position.lerp(tmp, Math.min(1, step / distance));
+        if (tmp.length() > remainingDistance) tmp.setLength(remainingDistance);
+        projectile.mesh.position.add(tmp);
+        projectile.distance += tmp.length();
+        projectile.mesh.rotation.y += stepDt * 8;
+
+        for (const enemy of this.enemies) {
+          if (enemy.dead || projectile.hits.has(enemy)) continue;
+          const dx = enemy.root.position.x - projectile.mesh.position.x;
+          const dz = enemy.root.position.z - projectile.mesh.position.z;
+          const hitRadius = enemy.radius + projectile.radius;
+          if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
+          this.hitEnemy(enemy, projectile.damage);
+          projectile.hits.add(enemy);
+          if (projectile.remaining > 0) projectile.remaining--;
+          else this.removeProjectile(projectile);
+          break;
+        }
+        if (projectile.distance >= projectile.maxDistance) this.removeProjectile(projectile);
       }
     }
     this.projectiles = this.projectiles.filter(p => !p.removed);
-  }
-
-  nearestEnemy(position, excluded = new Set()) {
-    let best = null, bestDistance = Infinity;
-    for (const enemy of this.enemies) {
-      if (enemy.dead || excluded.has(enemy)) continue;
-      const distance = enemy.root.position.distanceToSquared(position);
-      if (distance < bestDistance) { bestDistance = distance; best = enemy; }
-    }
-    return best;
   }
 
   removeProjectile(projectile) {
@@ -389,15 +455,57 @@ export class SurvivorGame {
     projectile.mesh.material.dispose();
   }
 
+  showEnemyIntro(variantId, duration = 5, stageNumber = this.stageIndex + 1) {
+    const variant = ENEMY_VARIANTS[variantId];
+    if (!variant || !this.ui.enemyIntro) return;
+    this.currentIntro = { variantId, stageNumber };
+    this.introRemaining = duration;
+    const stats = this.variantStats(variant);
+    this.ui.enemyIntro.innerHTML = `
+      <div class="enemy-head">
+        <span class="enemy-icon">${variant.icon}</span>
+        <span class="enemy-title"><small>QUÁI MỚI · MÀN ${stageNumber}</small><b>${variant.name}</b></span>
+      </div>
+      <div class="enemy-stats">
+        <span>♥ ${stats.hp} máu</span>
+        <span>⬟ ${stats.defense} giáp</span>
+        <span>➜ ${stats.speed.toFixed(1)} tốc</span>
+      </div>`;
+    this.ui.enemyIntro.className = 'show';
+    void this.ui.enemyIntro.offsetWidth;
+  }
+
+  showCurrentStageIntro() {
+    const stage = STAGES[Math.min(this.stageIndex, STAGES.length - 1)];
+    this.showEnemyIntro(stage.featured, 5, this.stageIndex + 1);
+  }
+
+  updateEnemyIntro(dt) {
+    if (!this.currentIntro || this.state !== 'playing') return;
+    this.introRemaining -= dt;
+    if (this.introRemaining > 0) return;
+    this.currentIntro = null;
+    this.introRemaining = 0;
+    this.ui.enemyIntro.className = 'hidden';
+  }
+
   updateSpawner(dt) {
+    const nextStage = Math.floor(this.elapsed / STAGE_DURATION);
+    if (nextStage !== this.stageIndex) {
+      this.stageIndex = nextStage;
+      if (this.stageIndex < STAGES.length) this.showEnemyIntro(STAGES[this.stageIndex].featured, 5, this.stageIndex + 1);
+      this.toast(`Màn ${this.stageIndex + 1}`);
+    }
     this.spawnClock -= dt;
     if (this.spawnClock > 0) return;
-    const minute = this.elapsed / 60;
-    this.spawnClock = Math.max(0.24, 0.92 - minute * 0.08);
-    const roll = Math.random();
-    const id = minute > 2.2 && roll < 0.22 ? 'Skeleton_Minion' : minute > 0.8 && roll < 0.48 ? 'Rat' : 'Enemy';
-    this.spawnEnemy(id);
-    if (minute > 1.5 && Math.random() < 0.18) this.spawnEnemy(id);
+    const stage = STAGES[Math.min(this.stageIndex, STAGES.length - 1)];
+    const cycle = Math.floor(this.stageIndex / STAGES.length);
+    this.spawnClock = Math.max(0.68, stage.interval - cycle * 0.08);
+    const alive = this.enemies.filter(enemy => !enemy.dead).length;
+    const cap = Math.min(ENEMY_CAP, stage.cap + cycle * 4);
+    if (alive >= cap) return;
+    const variantId = stage.pool[Math.floor(Math.random() * stage.pool.length)];
+    this.spawnEnemy(variantId);
   }
 
   updateEnemies(dt) {
@@ -414,7 +522,7 @@ export class SurvivorGame {
       }
       if (enemy.spawn < 1) {
         enemy.spawn = Math.min(1, enemy.spawn + dt * 4);
-        enemy.root.scale.setScalar(easeOutBack(enemy.spawn));
+        enemy.root.scale.setScalar(easeOutBack(enemy.spawn) * enemy.visualScale);
       }
 
       const pos = enemy.root.position;
@@ -457,14 +565,13 @@ export class SurvivorGame {
 
   hitEnemy(enemy, amount) {
     if (enemy.dead) return;
-    enemy.hp -= amount;
-    enemy.root.scale.multiplyScalar(1.04);
+    enemy.hp -= Math.max(1, amount - enemy.defense);
     if (enemy.hp <= 0) {
       enemy.dead = true;
       enemy.deadTime = 0;
       enemy.anim.play('death', { once:true, clamp:true });
       this.kills++;
-      this.spawnGem(enemy.root.position, enemy.entry.id === 'Skeleton_Minion' ? 2 : 1);
+      this.spawnGem(enemy.root.position, enemy.gem);
     }
   }
 
@@ -542,7 +649,9 @@ export class SurvivorGame {
       this.pendingLevels--;
       this.toast('⚔ Sức mạnh vô hạn +10%');
       if (this.pendingLevels > 0) this.showLevelUp();
-      else this.state = 'playing';
+      else {
+        this.state = 'playing';
+      }
       return;
     }
     this.hand = shuffle([...available]).slice(0, 3);
@@ -575,7 +684,9 @@ export class SurvivorGame {
     this.ui.modal.classList.add('hidden');
     this.toast(`${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
     if (this.pendingLevels > 0) this.showLevelUp();
-    else this.state = 'playing';
+    else {
+      this.state = 'playing';
+    }
     this.updateHud();
   }
 
@@ -630,6 +741,7 @@ export class SurvivorGame {
         this.ui.loadText.textContent = text;
       });
       this.ui.loading.classList.add('hidden');
+      requestAnimationFrame(() => this.showCurrentStageIntro());
     } catch (error) {
       console.error(error);
       this.ui.loading.innerHTML = `
@@ -645,8 +757,8 @@ export class SurvivorGame {
   updateCamera(dt) {
     const pos = this.hero.root.position;
     const portrait = innerHeight > innerWidth;
-    const height = portrait ? 15.5 : 12.5;
-    const offset = portrait ? 11.5 : 9.5;
+    const height = portrait ? 17 : 13;
+    const offset = portrait ? 12.5 : 10;
     tmp.set(pos.x, height, pos.z + offset);
     this.camera.position.lerp(tmp, Math.min(1, dt * 5));
     this.camera.lookAt(this.camera.position.x, 0.55, this.camera.position.z - offset);
@@ -660,6 +772,7 @@ export class SurvivorGame {
     this.ui.hpText.textContent = `${Math.ceil(Math.max(0, this.hero.hp))} / ${this.hero.maxHp}`;
     this.ui.heroName.textContent = this.hero.entry.name;
     this.ui.timer.textContent = this.formatTime(Math.floor(this.elapsed));
+    this.ui.stage.textContent = `MÀN ${this.stageIndex + 1}`;
     this.ui.kills.textContent = this.kills;
     this.ui.gems.textContent = this.gems;
     this.ui.level.textContent = `Cấp ${this.level}`;
@@ -680,6 +793,7 @@ export class SurvivorGame {
   resize(width, height) {
     if (!this.camera) return;
     this.camera.aspect = width / height;
+    this.camera.fov = height > width ? 50 : 45;
     this.camera.updateProjectionMatrix();
   }
 
@@ -696,6 +810,11 @@ export class SurvivorGame {
       unit.ring.geometry.dispose();
       unit.ring.material.dispose();
     }
+    if (unit.rangeRing) {
+      unit.root.remove(unit.rangeRing);
+      unit.rangeRing.geometry.dispose();
+      unit.rangeRing.material.dispose();
+    }
     const skeletons = new Set();
     unit.model?.traverse(object => {
       if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton);
@@ -705,6 +824,9 @@ export class SurvivorGame {
 
   cleanupScene() {
     if (!this.scene) return;
+    this.currentIntro = null;
+    this.introRemaining = 0;
+    this.ui.enemyIntro?.classList.add('hidden');
     for (const projectile of this.projectiles || []) this.removeProjectile(projectile);
     for (const pickup of this.pickups || []) {
       this.scene.remove(pickup.mesh);

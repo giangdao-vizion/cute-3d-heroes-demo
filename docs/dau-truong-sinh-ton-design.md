@@ -65,9 +65,10 @@ Trang game: `survivor-arena.html`.
 
 | Thời gian | Nội dung | Mục đích |
 |---|---|---|
-| 0:00–1:00 | Quái mầm xanh, chuột; mật độ thấp | Học di chuyển và nhặt ngọc |
-| 1:00–2:00 | Ong và đầu lâu bay cắt góc | Buộc đổi hướng |
-| 2:00–3:00 | Nhện trâu, tinh anh đầu tiên | Kiểm tra sát thương |
+| 0:00–0:50 | Chỉ có quái mầm xanh; mật độ thấp | Học di chuyển và nhặt ngọc |
+| 0:50–1:40 | Thêm mầm xanh lực sĩ: to, nhiều máu và có giáp | Giới thiệu biến thể chống chịu |
+| 1:40–2:30 | Thêm chuột trinh sát: ít máu nhưng chạy nhanh | Buộc đổi hướng |
+| 2:30–3:00 | Thêm vệ binh xương có giáp | Kiểm tra sát thương |
 | 3:00 | Boss Khủng long sừng | Boss lao thẳng, dạy né tín hiệu |
 | 3:00–4:30 | Xương chiến binh thành cụm | Khuyến khích sát thương diện rộng |
 | 4:30–6:00 | Xương pháp sư bắn xa, ong bao vây | Ép ưu tiên mục tiêu |
@@ -86,7 +87,7 @@ Giữ chỉ số nền từ `js/catalog.js`, sau đó thêm cấu hình riêng c
 |---|---|---|---|
 | Hiệp sĩ | Sóng kiếm theo hướng di chuyển | Trâu, dễ chơi | Tầm ngắn |
 | Chiến binh rìu | Rìu xoay quanh người | Dọn đàn sát thân | Khó đánh mục tiêu xa |
-| Pháp sư | Cầu phép tự tìm mục tiêu | Tầm xa, nguyên tố mạnh | Máu thấp |
+| Pháp sư | Cầu phép bay thẳng hơi cong | Tầm xa, nguyên tố mạnh | Máu thấp |
 | Sát thủ | Dao bắn về kẻ gần nhất | Tốc đánh cao | Sát thương mỗi đòn thấp |
 | Sát thủ trùm đầu | Nỏ xuyên theo đường thẳng | Hạ hàng quái tốt | Cần định vị |
 
@@ -141,6 +142,9 @@ Mỗi loại quái phải tạo một vấn đề khác nhau:
 - **Tinh anh:** bản lớn hơn, có hào quang và một thuộc tính ngẫu nhiên như nhanh, giáp hoặc nổ khi chết.
 
 Không sinh quái ngay trong vùng an toàn quanh người chơi hoặc trong vùng camera đang nhìn thấy quá gần.
+Mỗi loại hoặc biến thể mới được mở theo màn 50 giây, kèm thẻ giới thiệu 5 giây ở góc màn hình với tên, máu, giáp và tốc độ.
+
+Đòn đánh thường chỉ khóa hướng khi mục tiêu nằm trong tầm bắn. Đạn bay thẳng với độ cong nhỏ, không tiếp tục truy đuổi mục tiêu và biến mất khi đi hết tầm. Tầm bắn khởi đầu phải nằm trong vùng quan sát mobile và chỉ tăng qua thẻ nâng cấp.
 
 ### Boss
 

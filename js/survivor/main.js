@@ -10,11 +10,13 @@ const ui = {
   hpFill:$('hpFill'),
   hpText:$('hpText'),
   timer:$('timer'),
+  stage:$('stage'),
   kills:$('kills'),
   gems:$('gems'),
   xpFill:$('xpFill'),
   level:$('level'),
   pause:$('pause'),
+  enemyIntro:$('enemyIntro'),
   hint:$('hint'),
   joystick:$('joystick'),
   stick:$('stick'),
@@ -58,6 +60,7 @@ try {
     ui.loadText.textContent = text;
   });
   ui.loading.classList.add('hidden');
+  requestAnimationFrame(() => game.showCurrentStageIntro());
 } catch (error) {
   console.error(error);
   ui.loading.innerHTML = `
