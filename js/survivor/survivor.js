@@ -598,19 +598,9 @@ const ATTR_DEFS = [
     },
   },
   {
-    id:'vamp', icon:'🩸', name:'Hút máu', max:8,
-    desc:'Mỗi điểm hồi 2% sát thương gây ra',
-    value:g => `Hiện tại hút ${fmtPct((g.attrs.vamp || 0) * 0.02)} sát thương gây ra`,
-  },
-  {
     id:'pull', icon:'🧲', name:'Hút ngọc', max:8,
     desc:'Mỗi điểm +10% tầm hút ngọc',
     value:g => `Hiện tại tầm hút ${fmtMult(1 + (g.attrs.pull || 0) * 0.1)}`,
-  },
-  {
-    id:'luck', icon:'🍀', name:'May mắn', max:8,
-    desc:'Mỗi điểm +8% XP từ ngọc & vật phẩm map nhanh hơn',
-    value:g => `Hiện tại XP ngọc ${fmtMult(1 + (g.attrs.luck || 0) * 0.08)}`,
   },
   {
     id:'regen', icon:'🌿', name:'Hồi phục', max:8,
@@ -621,11 +611,6 @@ const ATTR_DEFS = [
     id:'mass', icon:'🪨', name:'Khối lượng', max:8,
     desc:'Mỗi điểm giảm 8% đẩy lùi (tối đa 75%)',
     value:g => `Hiện tại giảm đẩy lùi ${fmtPct(Math.min(0.75, (g.attrs.mass || 0) * 0.08))}`,
-  },
-  {
-    id:'elite', icon:'👑', name:'Tinh anh', max:10,
-    desc:'Mỗi điểm +8% sát thương lên boss/elite',
-    value:g => `Hiện tại ${fmtMult(1 + (g.attrs.elite || 0) * 0.08)} lên boss/elite`,
   },
 ];
 
@@ -646,6 +631,22 @@ const SPECIAL_UPGRADES = [
     id:'orbit', icon:'🌀', name:'Vòng xoáy',
     stats:['+ORBIT', '+DMG'],
     max:5, apply:g => { g.power.orbit++; g.updateOrbit(); },
+  },
+  // Trước đây nằm trong bảng thuộc tính — chuyển sang thẻ kỹ năng bổ trợ.
+  {
+    id:'vamp', icon:'🩸', name:'Hút máu',
+    stats:['+2.5% VAMP'],
+    max:5, apply:g => { g.power.vamp++; g.syncSupportPassives(); },
+  },
+  {
+    id:'luck', icon:'🍀', name:'May mắn',
+    stats:['+10% XP', '+LOOT'],
+    max:5, apply:g => { g.power.luck++; g.syncSupportPassives(); },
+  },
+  {
+    id:'elite', icon:'👑', name:'Săn boss',
+    stats:['+12% BOSS DMG'],
+    max:5, apply:g => { g.power.elite++; g.syncSupportPassives(); },
   },
 ];
 
@@ -860,7 +861,7 @@ export class SurvivorGame {
     this.introRemaining = 0;
     this.upgradeLevels = {};
     this.attrPoints = 0;
-    this.attrs = { str:0, agi:0, vit:0, def:0, cri:0, vamp:0, pull:0, luck:0, regen:0, mass:0, elite:0 };
+    this.attrs = { str:0, agi:0, vit:0, def:0, cri:0, pull:0, regen:0, mass:0 };
     this.regenGate = 0;
     this.synergies = { frostBurst:false, stormVolley:false, shrapnel:false, frostburn:false };
     this.burnTick = 0;
@@ -876,6 +877,8 @@ export class SurvivorGame {
       damage:1, damageBonus:1, interval:0.72, multi:1, pierce:0, size:1,
       magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
       chain:0, blast:0, freeze:0, burnAura:0, orbit:0, takenDamageMult:1,
+      vamp:0, luck:0, elite:0,
+      vampRate:0, luckXp:1, eliteMult:1,
     };
     this.orbitAngle = 0;
     this.orbitTick = 0;
@@ -1498,12 +1501,22 @@ export class SurvivorGame {
     this.power.attrMagnet = 1 + (a.pull || 0) * 0.1;
     this.power.critChance = Math.min(0.55, (a.cri || 0) * 0.04);
     this.power.critMult = 1.55 + (a.cri || 0) * 0.03;
-    this.power.vampRate = (a.vamp || 0) * 0.02;
-    this.power.luckXp = 1 + (a.luck || 0) * 0.08;
     this.power.regenPerSec = (a.regen || 0) * 0.45;
     this.power.massResist = Math.min(0.75, (a.mass || 0) * 0.08);
-    this.power.eliteMult = 1 + (a.elite || 0) * 0.08;
+    this.syncSupportPassives();
     this.updateMagnetRing();
+  }
+
+  /** Passiveives từ thẻ kỹ năng: hút máu / may mắn / sát thương boss. */
+  syncSupportPassives() {
+    const P = this.power;
+    P.vampRate = (P.vamp || 0) * 0.025;
+    P.luckXp = 1 + (P.luck || 0) * 0.1;
+    P.eliteMult = 1 + (P.elite || 0) * 0.12;
+  }
+
+  luckLevel() {
+    return this.power.luck || 0;
   }
 
   spendAttr(id) {
@@ -1832,7 +1845,7 @@ export class SurvivorGame {
   updateFieldDrops(dt) {
     this.fieldDropClock -= dt;
     if (this.fieldDropClock <= 0 && this.fieldDrops.length < FIELD_DROP_MAX) {
-      const luck = this.attrs.luck || 0;
+      const luck = this.luckLevel();
       this.fieldDropClock = (16 + Math.random() * 12) / (1 + luck * 0.07);
       this.spawnFieldDrop();
     }
@@ -1979,7 +1992,7 @@ export class SurvivorGame {
     if (!this.scene || !this.hero) return;
     let def = FIELD_DROPS[Math.floor(Math.random() * FIELD_DROPS.length)];
     // May mắn lệch nhẹ về phần thưởng điểm thuộc tính.
-    if ((this.attrs.luck || 0) > 0 && Math.random() < this.attrs.luck * 0.03) {
+    if (this.luckLevel() > 0 && Math.random() < this.luckLevel() * 0.03) {
       def = FIELD_DROPS.find(item => item.id === 'fieldAttr') || def;
     }
 
@@ -2626,7 +2639,7 @@ export class SurvivorGame {
   }
 
   maybeSpawnPotion(enemy) {
-    const luck = this.attrs.luck || 0;
+    const luck = this.luckLevel();
     const base = enemy.isBoss ? 0.9 : enemy.isElite ? 0.3 : 0.15;
     const chance = Math.min(0.95, base * (1 + luck * 0.05));
     if (Math.random() > chance) return;
