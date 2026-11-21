@@ -47,13 +47,22 @@ function viewportSize() {
   return {
     width: Math.max(1, Math.round(vv?.width ?? innerWidth)),
     height: Math.max(1, Math.round(vv?.height ?? innerHeight)),
+    top: Math.max(0, Math.round(vv?.offsetTop ?? 0)),
+    left: Math.max(0, Math.round(vv?.offsetLeft ?? 0)),
   };
 }
 
 function resize() {
-  const { width, height } = viewportSize();
-  document.documentElement.style.setProperty('--app-height', `${height}px`);
+  const { width, height, top, left } = viewportSize();
+  const root = document.documentElement;
+  root.style.setProperty('--app-height', `${height}px`);
+  root.style.setProperty('--app-width', `${width}px`);
+  root.style.setProperty('--app-top', `${top}px`);
+  root.style.setProperty('--app-left', `${left}px`);
   const canvas = $('c');
+  // Không dùng inset/bottom — chỉ top/left + size theo visualViewport (tránh dải nền dưới trên iPhone).
+  canvas.style.top = `${top}px`;
+  canvas.style.left = `${left}px`;
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   renderer.setSize(width, height, false);
