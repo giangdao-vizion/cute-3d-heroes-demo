@@ -611,8 +611,9 @@ export class SurvivorGame {
     await Promise.all([this.spawnEnemy('sprout'), this.spawnEnemy('sprout')]);
     if (runId !== this.runId) return;
 
-    this.camera.position.set(0, 13, 10);
-    this.camera.lookAt(0, 0.6, 0);
+    this.updateCameraFit();
+    this.camera.position.set(0, this.camFit.height, this.camFit.offset);
+    this.camera.lookAt(0, 0.55, 0);
     this.state = 'playing';
     this.ui.hud.classList.remove('hidden');
     this.ui.modal.classList.add('hidden');
@@ -760,7 +761,8 @@ export class SurvivorGame {
     rangeRing.position.y = 0.035;
     this.hero.root.add(rangeRing);
     this.hero.rangeRing = rangeRing;
-    this.updateCameraFov();
+    // Chỉ fit lại camera khi tầm bắn đổi.
+    this.updateCameraFit();
   }
 
   updateMagnetRing() {
@@ -1023,12 +1025,34 @@ export class SurvivorGame {
     }
   }
 
-  updateCameraFov() {
+  /**
+   * Fit camera để đường kính vòng tầm bắn ≈ 90% chiều ngang màn hình.
+   * FOV giữ ổn định (chỉ đổi portrait/landscape); khoảng cách camera đổi theo range.
+   */
+  updateCameraFit() {
     if (!this.camera || !this.power) return;
-    const baseFov = innerHeight > innerWidth ? 50 : 45;
-    const rangeRatio = Math.max(1, this.power.range / BASE_ATTACK_RANGE);
-    this.camera.fov = baseFov + Math.min(16, (rangeRatio - 1) * 16);
-    this.camera.updateProjectionMatrix();
+    const portrait = innerHeight > innerWidth;
+    const aspect = Math.max(0.35, innerWidth / Math.max(1, innerHeight));
+    const fov = portrait ? 50 : 45;
+    if (this.camera.fov !== fov) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    } else {
+      this.camera.updateProjectionMatrix();
+    }
+
+    const range = Math.max(1, this.power.range || BASE_ATTACK_RANGE);
+    const vFovRad = THREE.MathUtils.degToRad(fov);
+    const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
+    // 2R = 0.9 * visibleWidth → halfVisible = R / 0.9 = dist * tan(hFov/2)
+    const RANGE_SCREEN_FRACTION = 0.9;
+    const dist = (range / RANGE_SCREEN_FRACTION) / Math.max(1e-4, Math.tan(hFovRad / 2));
+
+    // Giữ góc nhìn cũ (cao / lùi) — chỉ scale khoảng cách.
+    const k = portrait ? 17 / 12.5 : 13 / 10;
+    const offset = Math.sqrt((dist * dist) / (k * k + 1));
+    const height = k * offset;
+    this.camFit = { height, offset, fov, range };
   }
 
   variantStats(variant, stageIndex = this.stageIndex) {
@@ -2328,14 +2352,8 @@ export class SurvivorGame {
 
   updateCamera(dt) {
     const pos = this.hero.root.position;
-    const portrait = innerHeight > innerWidth;
-    const rangeRatio = Math.max(1, this.power.range / BASE_ATTACK_RANGE);
-    const aspect = innerWidth / Math.max(1, innerHeight);
-    const narrowPhoneScale = portrait ? Math.max(1, 0.47 / aspect) : 1;
-    // Camera lùi theo đúng tầm bắn và bù thêm cho điện thoại rất dài/hẹp.
-    const viewScale = 1.38 * rangeRatio * narrowPhoneScale;
-    const height = (portrait ? 17 : 13) * viewScale;
-    const offset = (portrait ? 12.5 : 10) * viewScale;
+    if (!this.camFit) this.updateCameraFit();
+    const { height, offset } = this.camFit;
     tmp.set(pos.x, height, pos.z + offset);
     this.camera.position.lerp(tmp, Math.min(1, dt * 5));
     this.camera.lookAt(this.camera.position.x, 0.55, this.camera.position.z - offset);
@@ -2400,8 +2418,8 @@ export class SurvivorGame {
 
   resize(width, height) {
     if (!this.camera) return;
-    this.camera.aspect = width / height;
-    this.updateCameraFov();
+    this.camera.aspect = width / Math.max(1, height);
+    this.updateCameraFit();
     this.updateEnemyLabels();
   }
 
