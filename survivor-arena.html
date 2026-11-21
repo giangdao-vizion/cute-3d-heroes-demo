@@ -20,19 +20,20 @@
 <style>
   :root { --ink:#2b2340; --card:#fffaf2; --accent:#ff7a59; --purple:#7c3aed; --ground:#98d77d; }
   * { box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
-  html {
-    margin:0; width:100%; height:100%; overflow:hidden; background:var(--ground);
-  }
-  /* Body + canvas: absolute top/left/bottom/right:0 — cách fill màn hình ổn định trên iPhone. */
-  body {
-    position:absolute; top:0; left:0; bottom:0; right:0;
-    margin:0; overflow:hidden; background:var(--ground);
-    font-family:'Baloo 2',system-ui,sans-serif; color:var(--ink); touch-action:none;
+  html, body {
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:var(--ground);
+    font-family:'Baloo 2',system-ui,sans-serif;
+    color:var(--ink);
+    touch-action:none;
   }
   button, a { font:inherit; }
-  /* Canvas là replaced element: cần width/height 100% kèm top/left/bottom/right:0 mới stretch. */
+  /* Full màn hình: body 100% × 100%, canvas position:fixed phủ top/left/bottom/right. */
   canvas#c {
-    position:absolute;
+    position:fixed;
     top:0;
     left:0;
     bottom:0;
@@ -44,13 +45,13 @@
     background:var(--ground);
   }
   .hidden { display:none !important; }
-  #enemyLabels { position:absolute; top:0; left:0; bottom:0; right:0; z-index:2; overflow:hidden; pointer-events:none; }
+  #enemyLabels { position:fixed; top:0; left:0; bottom:0; right:0; z-index:2; overflow:hidden; pointer-events:none; }
   .enemy-hp { position:absolute; left:0; top:0; width:54px; height:12px; overflow:hidden; border:1.5px solid rgba(255,255,255,.95); border-radius:99px; background:rgba(43,35,64,.78); box-shadow:0 2px 5px rgba(0,0,0,.25); transform:translate3d(-100px,-100px,0); will-change:transform; }
   .enemy-hp i { display:block; width:100%; height:100%; background:linear-gradient(90deg,#ef4444,#fb7185); transform-origin:left center; }
   .enemy-hp b { position:absolute; inset:0; display:grid; place-items:center; color:#fff; font:800 9px/1 'Baloo 2',system-ui; text-align:center; text-shadow:0 1px 2px #000; }
 
   #hud {
-    position:absolute; top:0; left:0; bottom:0; right:0; z-index:3; pointer-events:none;
+    position:fixed; top:0; left:0; bottom:0; right:0; z-index:3; pointer-events:none;
     padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
     color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.35);
   }
@@ -124,7 +125,7 @@
   .dock-card.risk .card-lv { background:#ffedd5; color:#c2410c; }
   #attrBadge { position:absolute; left:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; z-index:1; }
   #attrSheet {
-    position:absolute; top:0; left:0; bottom:0; right:0; z-index:9;
+    position:fixed; top:0; left:0; bottom:0; right:0; z-index:9;
     display:flex; align-items:flex-end; justify-content:center;
     padding:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom));
     background:rgba(43,35,64,.45); touch-action:manipulation;
@@ -160,7 +161,7 @@
   #stick { position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px; border-radius:50%; background:rgba(255,255,255,.86); box-shadow:0 3px 12px rgba(0,0,0,.25); }
 
   #modal, #loading {
-    position:absolute; top:0; left:0; bottom:0; right:0; z-index:8;
+    position:fixed; top:0; left:0; bottom:0; right:0; z-index:8;
     display:flex; align-items:center; justify-content:center;
     padding:14px; background:rgba(43,35,64,.5); touch-action:manipulation;
   }
@@ -183,7 +184,7 @@
   #toast { position:fixed; z-index:6; left:50%; top:27%; transform:translateX(-50%); color:#fff; font-size:28px; font-weight:800; text-shadow:0 3px 0 #7c3aed,0 5px 12px rgba(0,0,0,.35); pointer-events:none; opacity:0; white-space:nowrap; }
   #toast.show { animation:toast 1.5s ease-out; }
   @keyframes toast { 0%{opacity:0;transform:translate(-50%,10px) scale(.8)} 15%,75%{opacity:1;transform:translate(-50%,0) scale(1)} 100%{opacity:0;transform:translate(-50%,-12px)} }
-  #damageFlash { position:absolute; top:0; left:0; bottom:0; right:0; z-index:2; pointer-events:none; box-shadow:inset 0 0 100px 22px rgba(239,68,68,.75); opacity:0; }
+  #damageFlash { position:fixed; top:0; left:0; bottom:0; right:0; z-index:2; pointer-events:none; box-shadow:inset 0 0 100px 22px rgba(239,68,68,.75); opacity:0; }
   #damageFlash.on { animation:flash .35s ease-out; }
   @keyframes flash { from{opacity:1} to{opacity:0} }
 

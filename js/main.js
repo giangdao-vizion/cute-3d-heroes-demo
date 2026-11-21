@@ -1,6 +1,5 @@
 import { byId } from './catalog.js';
 import { selection, saveSelection } from './state.js';
-import { CLOSE_SURVIVOR_MSG } from './lobby-nav.js';
 
 const $ = id => document.getElementById(id);
 const ui = {
@@ -17,54 +16,11 @@ let mode = 'home';
 let selectedMode = 'defense';
 let initializing;
 
-function ensureSurvivorFrame() {
-  let frame = $('survivorFrame');
-  if (frame) return frame;
-  frame = document.createElement('iframe');
-  frame.id = 'survivorFrame';
-  frame.className = 'hidden';
-  frame.title = 'Đấu Trường Sinh Tồn';
-  frame.setAttribute('allow', 'autoplay; fullscreen');
-  frame.setAttribute('allowfullscreen', '');
-  document.body.appendChild(frame);
-  return frame;
-}
-
+/** Mở Sinh tồn full-page — không iframe (canvas position:fixed phủ body 100%). */
 function openSurvivorArena() {
-  // Full-page location.href breaks iOS Home Screen standalone and brings Safari chrome back.
-  // Keep Sinh tồn in the same shell via iframe so the installed app stays fullscreen.
-  mode = 'survivor';
-  stopActiveMode();
-  stopRenderLoop();
-  showAppChrome(false);
-  $('home').classList.add('hidden');
-  $('loading').classList.add('hidden');
-  const frame = ensureSurvivorFrame();
-  frame.classList.remove('hidden');
-  // Cache-bust — buộc tải bản canvas absolute top/left/bottom/right:0.
-  const arenaUrl = 'survivor-arena.html?v=absfill2';
-  if (!frame.src || !frame.src.includes('v=absfill2')) {
-    frame.src = arenaUrl;
-  }
-  if (location.hash !== '#survivor') history.replaceState(null, '', '#survivor');
+  location.href = 'survivor-arena.html';
 }
 
-function closeSurvivorArena() {
-  const frame = $('survivorFrame');
-  if (frame) {
-    frame.classList.add('hidden');
-    frame.src = 'about:blank';
-  }
-  if (location.hash === '#survivor') {
-    history.replaceState(null, '', `${location.pathname}${location.search}`);
-  }
-  setMode('home');
-}
-
-addEventListener('message', (event) => {
-  if (event.origin !== location.origin) return;
-  if (event.data?.type === CLOSE_SURVIVOR_MSG) closeSurvivorArena();
-});
 const HERO_META = {
   Knight: { icon: '🛡️', style: 'Cân bằng', range: 'Cận chiến' },
   Barbarian: { icon: '🪓', style: 'Sát thương cao', range: 'Cận chiến' },

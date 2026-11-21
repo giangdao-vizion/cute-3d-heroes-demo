@@ -44,7 +44,7 @@ const game = new SurvivorGame(renderer, ui);
 
 function viewportSize() {
   const canvas = $('c');
-  // Canvas CSS: position absolute; top/left/bottom/right:0 — đọc kích thước thật từ DOM.
+  // Canvas CSS: position:fixed; top/left/bottom/right:0; width/height:100%.
   const width = Math.max(1, Math.round(canvas?.clientWidth || innerWidth));
   const height = Math.max(1, Math.round(canvas?.clientHeight || innerHeight));
   return { width, height };
@@ -53,7 +53,7 @@ function viewportSize() {
 function resize() {
   const { width, height } = viewportSize();
   const canvas = $('c');
-  // Không ghi đè top/left/bottom/right/width/height — để CSS absolute stretch.
+  // Không ghi đè CSS fixed stretch.
   canvas.style.top = '';
   canvas.style.left = '';
   canvas.style.right = '';
