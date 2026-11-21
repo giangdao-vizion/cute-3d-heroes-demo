@@ -77,8 +77,34 @@ function createGemMesh(tier) {
 
   group.add(body, table, girdle);
   group.rotation.y = 0.55;
-  group.userData.gemMats = [bodyMat, accentMat];
-  group.userData.gemGeos = [body.geometry, table.geometry, girdle.geometry];
+  group.userData.pickupMats = [bodyMat, accentMat];
+  group.userData.pickupGeos = [body.geometry, table.geometry, girdle.geometry];
+  return group;
+}
+
+/** Bình máu đứng yên — nhặt để hồi HP. */
+function createPotionMesh() {
+  const group = new THREE.Group();
+  const glass = new THREE.MeshBasicMaterial({ color:0xff5a7a, toneMapped:false });
+  const shine = new THREE.MeshBasicMaterial({ color:0xffd0da, toneMapped:false });
+  const cork = new THREE.MeshBasicMaterial({ color:0xb45309, toneMapped:false });
+
+  const flask = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.38, 8), glass);
+  flask.position.y = 0.22;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.14, 6), glass);
+  neck.position.y = 0.46;
+  const bub = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), shine);
+  bub.position.set(0.05, 0.26, 0.08);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.07, 6), cork);
+  top.position.y = 0.56;
+
+  for (const mesh of [flask, neck, bub, top]) {
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    group.add(mesh);
+  }
+  group.userData.pickupMats = [glass, shine, cork];
+  group.userData.pickupGeos = [flask.geometry, neck.geometry, bub.geometry, top.geometry];
   return group;
 }
 
@@ -1602,6 +1628,7 @@ export class SurvivorGame {
       enemy.anim.play('death', { once:true, clamp:true });
       this.kills++;
       this.spawnGem(enemy.root.position, enemy.gem);
+      this.maybeSpawnPotion(enemy);
       if (enemy.isBoss) {
         this.spawnGem(enemy.root.position, Math.max(12, Math.round(enemy.gem * 0.5)));
         this.attrPoints++;
@@ -1612,6 +1639,21 @@ export class SurvivorGame {
         this.grantXp(18);
       }
     }
+  }
+
+  maybeSpawnPotion(enemy) {
+    const luck = this.attrs.luck || 0;
+    const base = enemy.isBoss ? 0.9 : enemy.isElite ? 0.3 : 0.15;
+    const chance = Math.min(0.95, base * (1 + luck * 0.05));
+    if (Math.random() > chance) return;
+    const healPct = enemy.isBoss ? 0.35 : enemy.isElite ? 0.24 : 0.16 + Math.random() * 0.06;
+    const pos = enemy.root.position;
+    const offset = 0.45 + Math.random() * 0.35;
+    const a = Math.random() * Math.PI * 2;
+    this.spawnPotion(
+      tmp2.set(pos.x + Math.cos(a) * offset, 0, pos.z + Math.sin(a) * offset),
+      healPct
+    );
   }
 
   updateRegen(dt) {
@@ -1653,23 +1695,41 @@ export class SurvivorGame {
     mesh.position.y = 0.42;
     mesh.scale.setScalar(1);
     this.scene.add(mesh);
-    this.pickups.push({ mesh, value, tier, poolKey:key, age:0, collected:false });
+    this.pickups.push({ kind:'gem', mesh, value, tier, poolKey:key, age:0, collected:false });
+  }
+
+  spawnPotion(position, healPct = 0.18) {
+    const key = 'potion';
+    let pool = this.gemPool.get(key);
+    if (!pool) {
+      pool = [];
+      this.gemPool.set(key, pool);
+    }
+    let mesh = pool.pop();
+    if (!mesh) mesh = createPotionMesh();
+    mesh.visible = true;
+    mesh.position.copy(position);
+    mesh.position.y = 0.08;
+    mesh.scale.setScalar(1);
+    this.scene.add(mesh);
+    this.pickups.push({ kind:'potion', mesh, healPct, poolKey:key, age:0, collected:false });
   }
 
   updatePickups(dt) {
     const heroPos = this.hero.root.position;
     for (const pickup of this.pickups) {
       pickup.age += dt;
-      // Ngọc đứng yên — chỉ dịch chuyển khi bị nam châm hút.
+      // Đứng yên — chỉ dịch chuyển khi bị nam châm hút.
       const dx = pickup.mesh.position.x - heroPos.x;
       const dz = pickup.mesh.position.z - heroPos.z;
       const distanceSq = dx * dx + dz * dz;
       const magnet = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
       if (distanceSq < magnet * magnet) {
         const distance = Math.sqrt(distanceSq) || 0.001;
-        pickup.mesh.position.lerp(tmp2.set(heroPos.x, 0.42, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
+        const y = pickup.kind === 'potion' ? 0.08 : 0.42;
+        pickup.mesh.position.lerp(tmp2.set(heroPos.x, y, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
       }
-      if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectGem(pickup);
+      if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectPickup(pickup);
     }
     this.pickups = this.pickups.filter(pickup => !pickup.collected);
   }
@@ -1681,9 +1741,14 @@ export class SurvivorGame {
     const pool = this.gemPool?.get(pickup.poolKey);
     if (pool) pool.push(pickup.mesh);
     else {
-      for (const geometry of pickup.mesh.userData.gemGeos || []) geometry.dispose();
-      for (const material of pickup.mesh.userData.gemMats || []) material.dispose();
+      for (const geometry of pickup.mesh.userData.pickupGeos || pickup.mesh.userData.gemGeos || []) geometry.dispose();
+      for (const material of pickup.mesh.userData.pickupMats || pickup.mesh.userData.gemMats || []) material.dispose();
     }
+  }
+
+  collectPickup(pickup) {
+    if (pickup.kind === 'potion') this.collectPotion(pickup);
+    else this.collectGem(pickup);
   }
 
   collectGem(pickup) {
@@ -1692,6 +1757,18 @@ export class SurvivorGame {
     this.releaseGem(pickup);
     this.gems += pickup.value;
     this.grantXp(pickup.value * (this.power.luckXp || 1));
+  }
+
+  collectPotion(pickup) {
+    if (pickup.collected || !this.hero) return;
+    pickup.collected = true;
+    this.releaseGem(pickup);
+    const heal = Math.max(12, Math.round(this.hero.maxHp * (pickup.healPct || 0.18)));
+    const before = this.hero.hp;
+    this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + heal);
+    const gained = Math.round(this.hero.hp - before);
+    if (gained > 0) this.toast(`♥ +${gained} máu`);
+    this.updateHud();
   }
 
   xpNeeded() {
@@ -1972,8 +2049,8 @@ export class SurvivorGame {
     this.ui.eventBanner?.classList.add('hidden');
     for (const pool of this.gemPool?.values?.() || []) {
       for (const mesh of pool) {
-        for (const geometry of mesh.userData?.gemGeos || []) geometry.dispose();
-        for (const material of mesh.userData?.gemMats || []) material.dispose();
+        for (const geometry of mesh.userData?.pickupGeos || mesh.userData?.gemGeos || []) geometry.dispose();
+        for (const material of mesh.userData?.pickupMats || mesh.userData?.gemMats || []) material.dispose();
       }
     }
     this.gemPool?.clear?.();
