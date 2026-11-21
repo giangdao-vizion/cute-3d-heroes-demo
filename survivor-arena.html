@@ -33,8 +33,10 @@
 
   #hud { position:fixed; inset:0; z-index:3; pointer-events:none; padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom); color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.35); }
   .top { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:10px; right:10px; display:grid; grid-template-columns:minmax(100px,1fr) auto minmax(100px,1fr); align-items:start; gap:8px; }
-  .hero { width:min(240px,38vw); padding:7px 10px; border-radius:16px; background:rgba(43,35,64,.78); box-shadow:0 4px 14px rgba(0,0,0,.2); }
-  #heroName { font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hero { position:relative; width:min(240px,38vw); padding:7px 10px; border:0; border-radius:16px; background:rgba(43,35,64,.78); box-shadow:0 4px 14px rgba(0,0,0,.2); color:#fff; font:inherit; text-align:left; pointer-events:auto; cursor:pointer; -webkit-tap-highlight-color:transparent; appearance:none; }
+  .hero:active { transform:scale(.98); }
+  .hero::after { content:'Thuộc tính'; position:absolute; right:8px; top:6px; padding:1px 6px; border-radius:99px; background:rgba(255,255,255,.14); color:rgba(255,255,255,.82); font-size:9px; font-weight:800; letter-spacing:.02em; }
+  #heroName { font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:64px; }
   .bar { height:12px; background:rgba(0,0,0,.32); border:2px solid rgba(255,255,255,.9); border-radius:99px; overflow:hidden; }
   .bar i { display:block; width:100%; height:100%; transition:width .15s; }
   .hp i { background:linear-gradient(90deg,#22c55e,#4ade80); }
@@ -43,24 +45,22 @@
   .timer small { display:block; font-size:11px; line-height:1; opacity:.85; }
   .score { justify-self:end; padding:5px 10px; border-radius:14px; background:rgba(43,35,64,.75); font-weight:800; text-align:right; }
   .score span { display:block; white-space:nowrap; }
-  #pause, #openAttrs { position:absolute; width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
-  #pause { right:12px; top:calc(82px + env(safe-area-inset-top)); }
-  #openAttrs { right:62px; top:calc(82px + env(safe-area-inset-top)); font-size:18px; }
-  #attrBadge { position:absolute; right:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; }
+  #pause { position:absolute; right:12px; top:calc(82px + env(safe-area-inset-top)); width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
+  #attrBadge { position:absolute; left:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; z-index:1; }
   #attrSheet { position:fixed; inset:0; z-index:9; display:flex; align-items:flex-end; justify-content:center; padding:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom)); background:rgba(43,35,64,.45); touch-action:manipulation; }
-  #attrSheet .sheet { width:min(440px,100%); max-height:min(78dvh,560px); overflow:auto; padding:16px 16px 18px; border-radius:24px 24px 18px 18px; background:var(--card); box-shadow:0 -12px 40px rgba(0,0,0,.28); }
+  #attrSheet .sheet { width:min(440px,100%); max-height:min(84dvh,640px); overflow:auto; padding:16px 16px 18px; border-radius:24px 24px 18px 18px; background:var(--card); box-shadow:0 -12px 40px rgba(0,0,0,.28); }
   #attrSheet .sheet-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
   #attrSheet .sheet-head h2 { margin:0; font-size:24px; line-height:1; }
   #attrSheet .points { padding:3px 10px; border-radius:99px; background:#efe6ff; color:#6d28d9; font-weight:800; font-size:13px; white-space:nowrap; }
-  .attr-row { display:grid; grid-template-columns:44px minmax(0,1fr) auto; align-items:center; gap:10px; padding:10px; margin-top:8px; border:2px solid #eee3d3; border-radius:16px; background:#fff; text-align:left; }
-  .attr-icon { width:44px; height:44px; display:grid; place-items:center; border-radius:14px; background:#f3e8ff; font-size:24px; }
+  .attr-row { display:grid; grid-template-columns:40px minmax(0,1fr) auto; align-items:center; gap:8px; padding:8px; margin-top:6px; border:2px solid #eee3d3; border-radius:14px; background:#fff; text-align:left; }
+  .attr-icon { width:40px; height:40px; display:grid; place-items:center; border-radius:12px; background:#f3e8ff; font-size:22px; }
   .attr-copy b { display:block; font-size:16px; line-height:1.1; }
   .attr-copy small { display:block; color:#6b6280; font-size:12px; line-height:1.25; }
   .attr-copy em { display:inline-block; margin-top:3px; color:#7c3aed; font-size:12px; font-style:normal; font-weight:800; }
   .attr-plus { width:42px; height:42px; border:0; border-radius:14px; background:var(--accent); color:#fff; font-size:24px; font-weight:800; cursor:pointer; }
   .attr-plus:disabled { opacity:.35; cursor:default; }
   #attrClose { min-width:0; padding:8px 14px; border:0; border-radius:12px; background:#e6dccb; color:var(--ink); font-weight:800; cursor:pointer; }
-  #enemyIntro { position:absolute; right:112px; top:calc(82px + env(safe-area-inset-top)); width:min(230px,62vw); padding:8px 10px; border:2px solid rgba(255,255,255,.9); border-radius:16px; background:rgba(255,250,242,.94); color:var(--ink); text-shadow:none; box-shadow:0 7px 20px rgba(43,35,64,.24); opacity:0; transform:translateX(14px) scale(.94); transform-origin:top right; transition:opacity .22s ease,transform .22s ease; }
+  #enemyIntro { position:absolute; right:62px; top:calc(82px + env(safe-area-inset-top)); width:min(230px,62vw); padding:8px 10px; border:2px solid rgba(255,255,255,.9); border-radius:16px; background:rgba(255,250,242,.94); color:var(--ink); text-shadow:none; box-shadow:0 7px 20px rgba(43,35,64,.24); opacity:0; transform:translateX(14px) scale(.94); transform-origin:top right; transition:opacity .22s ease,transform .22s ease; }
   #enemyIntro.show { opacity:1; transform:none; }
   .enemy-head { display:flex; align-items:center; gap:7px; }
   .enemy-icon { width:36px; height:36px; display:grid; place-items:center; flex:0 0 auto; border-radius:11px; background:#fee2e2; font-size:22px; }
@@ -114,9 +114,9 @@
     .hero { width:34vw; padding:5px 7px; }
     #heroName { font-size:13px; }
     .timer { min-width:86px; padding:3px 9px; font-size:23px; }
-    #enemyIntro { right:58px; top:calc(126px + env(safe-area-inset-top)); width:min(215px,60vw); padding:7px 8px; }
-    #pause, #openAttrs { top:calc(74px + env(safe-area-inset-top)); width:38px; height:38px; }
-    #openAttrs { right:56px; font-size:16px; }
+    #enemyIntro { right:58px; top:calc(74px + env(safe-area-inset-top)); width:min(215px,60vw); padding:7px 8px; }
+    #pause { top:calc(74px + env(safe-area-inset-top)); width:38px; height:38px; }
+    .hero::after { font-size:8px; right:6px; top:5px; }
     .enemy-stats { gap:3px; }
     .enemy-stats span { font-size:10px; padding-inline:2px; }
     .score { font-size:13px; padding:4px 7px; }
@@ -140,15 +140,15 @@
 
 <div id="hud" class="hidden">
   <div class="top">
-    <div class="hero">
+    <button type="button" class="hero" id="heroPanel" aria-label="Mở bảng thuộc tính">
+      <span id="attrBadge" class="hidden">0</span>
       <div id="heroName">Anh hùng</div>
       <div class="bar hp"><i id="hpFill"></i></div>
       <span id="hpText"></span>
-    </div>
+    </button>
     <div class="timer"><span id="timer">00:00</span><small id="stage">MÀN 1</small></div>
     <div class="score"><span>☠ <b id="kills">0</b></span><span>◆ <b id="gems">0</b></span></div>
   </div>
-  <button id="openAttrs" aria-label="Thuộc tính nhân vật">👤<span id="attrBadge" class="hidden">0</span></button>
   <button id="pause" aria-label="Tạm dừng">Ⅱ</button>
   <div id="enemyIntro" class="hidden" aria-live="polite"></div>
   <div class="xp"><i id="xpFill"></i><span id="level">Cấp 1</span></div>
@@ -165,7 +165,7 @@
         <button id="attrClose" type="button">Đóng</button>
       </div>
     </div>
-    <p style="margin:0 0 4px;color:#6b6280;font-size:13px;font-weight:700;text-align:left">Cộng điểm vào chỉ số cơ bản. Phần thưởng lên cấp vẫn cho kỹ năng đặc biệt hoặc thêm điểm.</p>
+    <p style="margin:0 0 4px;color:#6b6280;font-size:13px;font-weight:700;text-align:left">Chạm tên/HP góc trên để mở bảng này. Cộng điểm vào chỉ số; lên cấp vẫn cho kỹ năng hoặc thêm điểm.</p>
     <div id="attrRows"></div>
   </div>
 </div>

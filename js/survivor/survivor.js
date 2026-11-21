@@ -46,10 +46,17 @@ const GEM_TIERS = [
 
 /** Chỉ số cơ bản — cộng bằng điểm thuộc tính trong bảng nhân vật. */
 const ATTR_DEFS = [
-  { id:'str', icon:'⚔', name:'Sức mạnh', desc:'+12% sát thương mỗi điểm', max:12, perLevel:0.12 },
-  { id:'agi', icon:'👟', name:'Tốc độ', desc:'+8% tốc độ chạy mỗi điểm', max:12, perLevel:0.08 },
-  { id:'vit', icon:'♥', name:'Sinh lực', desc:'+22 máu tối đa mỗi điểm', max:12, perLevel:22 },
-  { id:'def', icon:'⬟', name:'Phòng thủ', desc:'Giảm 6% sát thương nhận mỗi điểm', max:10, perLevel:0.06 },
+  { id:'str', icon:'⚔', name:'Sức mạnh', desc:'+12% sát thương mỗi điểm', max:12 },
+  { id:'agi', icon:'👟', name:'Tốc độ', desc:'+8% tốc độ chạy mỗi điểm', max:12 },
+  { id:'vit', icon:'♥', name:'Sinh lực', desc:'+22 máu tối đa mỗi điểm', max:12 },
+  { id:'def', icon:'⬟', name:'Phòng thủ', desc:'Giảm 6% sát thương nhận mỗi điểm', max:10 },
+  { id:'cri', icon:'✴', name:'Chí mạng', desc:'+4% tỉ lệ chí mạng mỗi điểm', max:10 },
+  { id:'vamp', icon:'🩸', name:'Hút máu', desc:'Hồi 2% sát thương gây ra mỗi điểm', max:8 },
+  { id:'pull', icon:'🧲', name:'Hút ngọc', desc:'+10% tầm hút ngọc mỗi điểm', max:8 },
+  { id:'luck', icon:'🍀', name:'May mắn', desc:'+8% XP ngọc & vật phẩm map xuất hiện nhanh hơn', max:8 },
+  { id:'regen', icon:'🌿', name:'Hồi phục', desc:'+0.45 máu/giây mỗi điểm khi không vừa bị đánh', max:8 },
+  { id:'mass', icon:'🪨', name:'Khối lượng', desc:'Giảm 8% đẩy lùi mỗi điểm', max:8 },
+  { id:'elite', icon:'👑', name:'Tinh anh', desc:'+8% sát thương lên boss/elite mỗi điểm', max:10 },
 ];
 
 /** Phần thưởng lên cấp: kỹ năng bổ trợ (không gồm chỉ số cơ bản). */
@@ -204,7 +211,7 @@ export class SurvivorGame {
     canvas.addEventListener('pointerup', stop);
     canvas.addEventListener('pointercancel', stop);
     this.ui.pause.onclick = () => this.togglePause();
-    this.ui.openAttrs?.addEventListener('click', () => this.toggleAttrSheet());
+    this.ui.heroPanel?.addEventListener('click', () => this.toggleAttrSheet());
     this.ui.attrClose?.addEventListener('click', () => this.closeAttrSheet());
     this.ui.attrSheet?.addEventListener('click', e => {
       if (e.target === this.ui.attrSheet) this.closeAttrSheet();
@@ -273,7 +280,8 @@ export class SurvivorGame {
     this.introRemaining = 0;
     this.upgradeLevels = {};
     this.attrPoints = 0;
-    this.attrs = { str:0, agi:0, vit:0, def:0 };
+    this.attrs = { str:0, agi:0, vit:0, def:0, cri:0, vamp:0, pull:0, luck:0, regen:0, mass:0, elite:0 };
+    this.regenGate = 0;
     this.synergies = { frostBurst:false, stormVolley:false, shrapnel:false, frostburn:false };
     this.burnTick = 0;
     this.bossSpawned = {};
@@ -478,7 +486,7 @@ export class SurvivorGame {
       this.hero.root.remove(this.hero.magnetRing);
       this.hero.magnetRing.geometry.dispose();
     }
-    const radius = 2.2 * this.power.magnet;
+    const radius = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
     const magnetRing = new THREE.Mesh(
       new THREE.RingGeometry(Math.max(0.1, radius - 0.045), radius + 0.045, 64),
       this.hero.magnetRing?.material || new THREE.MeshBasicMaterial({ color:0xc084fc, transparent:true, opacity:0.38, depthWrite:false })
@@ -634,6 +642,7 @@ export class SurvivorGame {
     enemy.slowT = 0;
     enemy.slowFactor = 1;
     enemy.paralyzeT = 0;
+    enemy.isElite = variantId === 'sproutBrute' || variantId === 'skeletonGuard' || variantId === 'skeletonRaider';
     const heroPos = this.hero?.root.position || tmp.set(0,0,0);
     let placed = false;
     for (let attempt = 0; attempt < 16; attempt++) {
@@ -661,6 +670,7 @@ export class SurvivorGame {
       this.elapsed += dt;
       this.updateTempBuffs(dt);
       this.updateHero(dt);
+      this.updateRegen(dt);
       this.updateBurnAuraCombat(dt);
       this.updateSpawner(dt);
       this.updateBossEvents();
@@ -695,14 +705,23 @@ export class SurvivorGame {
 
   recalcAttributes() {
     if (!this.hero) return;
-    const { str, agi, vit, def } = this.attrs;
-    this.power.damage = (1 + str * 0.12) * (this.power.damageBonus || 1);
-    this.hero.speed = this.hero.baseSpeed * (1 + agi * 0.08);
-    const nextMax = this.hero.baseMaxHp + vit * 22;
+    const a = this.attrs;
+    this.power.damage = (1 + (a.str || 0) * 0.12) * (this.power.damageBonus || 1);
+    this.hero.speed = this.hero.baseSpeed * (1 + (a.agi || 0) * 0.08);
+    const nextMax = this.hero.baseMaxHp + (a.vit || 0) * 22;
     const gained = nextMax - this.hero.maxHp;
     this.hero.maxHp = nextMax;
     if (gained > 0) this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + gained);
-    this.power.armor = Math.pow(0.94, def);
+    this.power.armor = Math.pow(0.94, a.def || 0);
+    this.power.attrMagnet = 1 + (a.pull || 0) * 0.1;
+    this.power.critChance = Math.min(0.55, (a.cri || 0) * 0.04);
+    this.power.critMult = 1.55 + (a.cri || 0) * 0.03;
+    this.power.vampRate = (a.vamp || 0) * 0.02;
+    this.power.luckXp = 1 + (a.luck || 0) * 0.08;
+    this.power.regenPerSec = (a.regen || 0) * 0.45;
+    this.power.massResist = Math.min(0.75, (a.mass || 0) * 0.08);
+    this.power.eliteMult = 1 + (a.elite || 0) * 0.08;
+    this.updateMagnetRing();
   }
 
   spendAttr(id) {
@@ -867,7 +886,7 @@ export class SurvivorGame {
   }
 
   grantXp(amount) {
-    this.xp += amount;
+    this.xp += Math.max(0, amount);
     while (this.xp >= this.xpNeeded()) {
       this.xp -= this.xpNeeded();
       this.level++;
@@ -985,7 +1004,8 @@ export class SurvivorGame {
   updateFieldDrops(dt) {
     this.fieldDropClock -= dt;
     if (this.fieldDropClock <= 0 && this.fieldDrops.length < FIELD_DROP_MAX) {
-      this.fieldDropClock = 16 + Math.random() * 12;
+      const luck = this.attrs.luck || 0;
+      this.fieldDropClock = (16 + Math.random() * 12) / (1 + luck * 0.07);
       this.spawnFieldDrop();
     }
     for (const drop of this.fieldDrops) {
@@ -1020,7 +1040,11 @@ export class SurvivorGame {
 
   spawnFieldDrop() {
     if (!this.scene || !this.hero) return;
-    const def = FIELD_DROPS[Math.floor(Math.random() * FIELD_DROPS.length)];
+    let def = FIELD_DROPS[Math.floor(Math.random() * FIELD_DROPS.length)];
+    // May mắn lệch nhẹ về phần thưởng điểm thuộc tính.
+    if ((this.attrs.luck || 0) > 0 && Math.random() < this.attrs.luck * 0.03) {
+      def = FIELD_DROPS.find(item => item.id === 'fieldAttr') || def;
+    }
     const life = 15 + Math.random() * 15;
     const group = new THREE.Group();
     const core = new THREE.Mesh(
@@ -1156,7 +1180,7 @@ export class SurvivorGame {
           const dz = enemy.root.position.z - projectile.mesh.position.z;
           const hitRadius = enemy.radius + projectile.radius;
           if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
-          this.hitEnemy(enemy, projectile.damage);
+          this.hitEnemy(enemy, projectile.damage, { canCrit:true });
           this.applyProjectileEffects(enemy, projectile.damage, projectile);
           projectile.hits.add(enemy);
           if (projectile.remaining > 0) projectile.remaining--;
@@ -1524,9 +1548,18 @@ export class SurvivorGame {
     }
   }
 
-  hitEnemy(enemy, amount) {
+  hitEnemy(enemy, amount, { canCrit = false } = {}) {
     if (enemy.dead) return;
-    enemy.hp -= Math.max(1, amount - enemy.defense);
+    let raw = amount;
+    if (canCrit && (this.power.critChance || 0) > 0 && Math.random() < this.power.critChance) {
+      raw *= this.power.critMult || 1.55;
+    }
+    if ((enemy.isBoss || enemy.isElite) && this.power.eliteMult) raw *= this.power.eliteMult;
+    const dealt = Math.max(1, raw - enemy.defense);
+    enemy.hp -= dealt;
+    if ((this.power.vampRate || 0) > 0 && this.hero && !this.hero.dead) {
+      this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + dealt * this.power.vampRate);
+    }
     if (enemy.hp > 0) {
       this.ensureEnemyHealth(enemy);
       this.updateEnemyHealth(enemy);
@@ -1553,12 +1586,22 @@ export class SurvivorGame {
     }
   }
 
+  updateRegen(dt) {
+    this.regenGate = Math.max(0, this.regenGate - dt);
+    const rate = this.power.regenPerSec || 0;
+    if (rate <= 0 || this.regenGate > 0 || !this.hero || this.hero.dead) return;
+    if (this.hero.hp >= this.hero.maxHp) return;
+    this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + rate * dt);
+  }
+
   damageHero(amount, dx, dz) {
     const damage = Math.max(1, Math.round(amount * this.power.armor * (this.power.takenDamageMult || 1)));
     this.hero.hp -= damage;
     this.hero.invulnerable = 0.62;
-    this.hero.root.position.x += dx * 0.85;
-    this.hero.root.position.z += dz * 0.85;
+    this.regenGate = 1.6;
+    const knock = 0.85 * Math.max(0.2, 1 - (this.power.massResist || 0));
+    this.hero.root.position.x += dx * knock;
+    this.hero.root.position.z += dz * knock;
     if (this.hero.root.position.length() > this.arenaRadius - 0.8) this.hero.root.position.setLength(this.arenaRadius - 0.8);
     this.hero.anim.play('hit', { once:true, speed:1.5, onDone:() => !this.hero.dead && this.hero.anim.play('idle') });
     this.ui.damageFlash.classList.remove('on');
@@ -1604,7 +1647,7 @@ export class SurvivorGame {
       const dx = pickup.mesh.position.x - heroPos.x;
       const dz = pickup.mesh.position.z - heroPos.z;
       const distanceSq = dx * dx + dz * dz;
-      const magnet = 2.2 * this.power.magnet;
+      const magnet = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
       if (distanceSq < magnet * magnet) {
         const distance = Math.sqrt(distanceSq) || 0.001;
         pickup.mesh.position.lerp(tmp2.set(heroPos.x, 0.7, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
@@ -1631,13 +1674,7 @@ export class SurvivorGame {
     pickup.collected = true;
     this.releaseGem(pickup);
     this.gems += pickup.value;
-    this.xp += pickup.value;
-    while (this.xp >= this.xpNeeded()) {
-      this.xp -= this.xpNeeded();
-      this.level++;
-      this.pendingLevels++;
-    }
-    if (this.pendingLevels > 0 && this.state === 'playing') this.showLevelUp();
+    this.grantXp(pickup.value * (this.power.luckXp || 1));
   }
 
   xpNeeded() {

@@ -18,7 +18,7 @@ const ui = {
   xpFill:$('xpFill'),
   level:$('level'),
   pause:$('pause'),
-  openAttrs:$('openAttrs'),
+  heroPanel:$('heroPanel'),
   attrBadge:$('attrBadge'),
   attrSheet:$('attrSheet'),
   attrRows:$('attrRows'),
