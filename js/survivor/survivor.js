@@ -11,7 +11,7 @@ const RING_SHRINK_PER_SEC = 0.042;
 const ENEMY_CAP = 55;
 const STAGE_DURATION = 50;
 const BASE_ATTACK_RANGE = 6.2;
-const FIELD_DROP_MAX = 2;
+const FIELD_DROP_MAX = 3;
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -48,6 +48,8 @@ const GEM_TIERS = [
 const SHARED_PICKUPS = {
   gemMats: new Map(),
   potionMat: null,
+  cardMats: new Map(),
+  cardPlane: null,
 };
 
 function cssHex(hex) {
@@ -309,6 +311,106 @@ function disposeSharedPickups() {
     SHARED_PICKUPS.potionMat.dispose();
     SHARED_PICKUPS.potionMat = null;
   }
+  for (const mat of SHARED_PICKUPS.cardMats.values()) {
+    mat.map?.dispose();
+    mat.dispose();
+  }
+  SHARED_PICKUPS.cardMats.clear();
+  SHARED_PICKUPS.cardPlane?.dispose();
+  SHARED_PICKUPS.cardPlane = null;
+}
+
+/** Texture thẻ kỹ năng — icon lớn, viền vàng, xoay trên map. */
+function makeSkillCardTexture(icon, title, accentHex = 0xfbbf24) {
+  const W = 160;
+  const H = 220;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const accent = `#${(accentHex >>> 0).toString(16).padStart(6, '0')}`;
+
+  // Bóng
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(W / 2, H - 14, 48, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Thân thẻ
+  const grad = ctx.createLinearGradient(20, 16, 140, 200);
+  grad.addColorStop(0, '#fff7ed');
+  grad.addColorStop(0.55, '#ffedd5');
+  grad.addColorStop(1, '#fdba74');
+  roundRectPath(ctx, 18, 12, 124, 186, 16);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 2;
+  roundRectPath(ctx, 28, 22, 104, 166, 12);
+  ctx.stroke();
+
+  // Icon
+  ctx.font = '64px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(icon || '✦', W / 2, 88);
+
+  // Nhãn
+  ctx.fillStyle = '#7c2d12';
+  ctx.font = 'bold 18px sans-serif';
+  const label = (title || 'Thẻ kỹ năng').slice(0, 12);
+  ctx.fillText(label, W / 2, 150);
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('KỸ NĂNG', W / 2, 174);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function getSkillCardMaterial(skill) {
+  const key = skill?.id || 'generic';
+  let mat = SHARED_PICKUPS.cardMats.get(key);
+  if (mat) return mat;
+  mat = new THREE.MeshBasicMaterial({
+    map: makeSkillCardTexture(skill?.icon || '✦', skill?.name || 'Thẻ kỹ năng', skill?.color || 0xf59e0b),
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  SHARED_PICKUPS.cardMats.set(key, mat);
+  return mat;
+}
+
+function getSkillCardPlane() {
+  if (!SHARED_PICKUPS.cardPlane) {
+    SHARED_PICKUPS.cardPlane = new THREE.PlaneGeometry(1.05, 1.45);
+  }
+  return SHARED_PICKUPS.cardPlane;
+}
+
+function createSkillCardMesh(skill) {
+  const mesh = new THREE.Mesh(getSkillCardPlane(), getSkillCardMaterial(skill));
+  mesh.position.y = 0.72;
+  mesh.userData.sharedPickup = true;
+  return mesh;
 }
 
 /** Field-drop cleanup — bỏ qua SpriteMaterial/texture dùng chung. */
@@ -480,10 +582,14 @@ const ATTR_POINT_CARD = {
   max:999,
 };
 
-const BOSS_EVENTS = [
-  { at:120, variantId:'bossRex', entryId:'Trex', name:'T-Rex Hung Hãn', icon:'🦖', hp:560, defense:4, speed:2.15, dmg:16, scale:1.12, gem:28 },
-  { at:240, variantId:'bossTri', entryId:'Triceratops', name:'Tri Sừng Thép', icon:'🦕', hp:820, defense:6, speed:2.3, dmg:20, scale:1.05, gem:42 },
-  { at:360, variantId:'bossRex2', entryId:'Trex', name:'T-Rex Ác Mộng', icon:'🦖', hp:1200, defense:8, speed:2.45, dmg:26, scale:1.26, gem:65 },
+/** Mỗi phút một boss; archetype quyết định hướng mạnh (máu / tốc / sát thương). */
+const BOSS_ARCHETYPES = [
+  { entryId:'Trex', name:'T-Rex Hung Hãn', icon:'🦖', focus:'tank', focusLabel:'Giáp dày' },
+  { entryId:'Triceratops', name:'Tri Sừng Gió', icon:'🦕', focus:'swift', focusLabel:'Tốc độ' },
+  { entryId:'Trex', name:'T-Rex Huyết Chiến', icon:'🦖', focus:'bruiser', focusLabel:'Sát thương' },
+  { entryId:'Triceratops', name:'Tri Sừng Thép', icon:'🦕', focus:'tank', focusLabel:'Giáp dày' },
+  { entryId:'Trex', name:'T-Rex Bão Táp', icon:'🦖', focus:'swift', focusLabel:'Tốc độ' },
+  { entryId:'Triceratops', name:'Tri Sừng Cuồng Nộ', icon:'🦕', focus:'bruiser', focusLabel:'Sát thương' },
 ];
 
 const FIELD_DROPS = [
@@ -492,6 +598,7 @@ const FIELD_DROPS = [
   { id:'fieldXp', icon:'✦', color:0xfbbf24, name:'Bùng nổ XP', apply:g => { g.grantXp(14); } },
   { id:'fieldShield', icon:'⛨', color:0x60a5fa, name:'Khiên tạm', apply:g => { g.hero.invulnerable = Math.max(g.hero.invulnerable, 2.4); } },
   { id:'fieldRage', icon:'⚔', color:0xef4444, name:'Nộ chiến', apply:g => { g.tempBuffs.damage = { t:9, mult:1.4 }; } },
+  { id:'fieldSkill', icon:'🃏', color:0xf59e0b, name:'Thẻ kỹ năng', kind:'skillCard' },
 ];
 
 function easeOutBack(x) {
@@ -630,6 +737,7 @@ export class SurvivorGame {
     this.synergies = { frostBurst:false, stormVolley:false, shrapnel:false, frostburn:false };
     this.burnTick = 0;
     this.bossSpawned = {};
+    this.bossWave = 0;
     this.arenaRadius = ARENA;
     this.ringDamageClock = 0;
     this.fieldDropClock = 12 + Math.random() * 6;
@@ -1485,13 +1593,59 @@ export class SurvivorGame {
   }
 
   async updateBossEvents() {
-    for (const event of BOSS_EVENTS) {
-      if (this.elapsed < event.at || this.bossSpawned[event.variantId]) continue;
-      this.bossSpawned[event.variantId] = true;
-      this.flashEvent(`${event.icon} Boss: ${event.name}`, 4.2);
-      this.toast(`${event.icon} ${event.name}`);
-      this.spawnBoss(event);
+    // Boss đầu tiên ở phút 1, rồi mỗi phút một con mạnh hơn.
+    const dueWave = Math.floor(this.elapsed / 60);
+    while (this.bossWave < dueWave) {
+      this.bossWave++;
+      await this.spawnEscalatingBoss(this.bossWave);
     }
+  }
+
+  buildBossEvent(wave) {
+    const arch = BOSS_ARCHETYPES[(wave - 1) % BOSS_ARCHETYPES.length];
+    let hp = Math.round(320 + wave * 200 + wave * wave * 28);
+    let speed = 1.95 + wave * 0.09;
+    let dmg = Math.round(11 + wave * 3.8);
+    let scale = 1.02 + wave * 0.09;
+    let defense = Math.floor(1 + wave * 0.85);
+    let gem = 20 + wave * 12;
+
+    if (arch.focus === 'tank') {
+      hp = Math.round(hp * 1.4);
+      scale += 0.14;
+      defense += 2 + Math.floor(wave / 2);
+    } else if (arch.focus === 'swift') {
+      speed += 0.5 + wave * 0.06;
+      scale = Math.max(0.95, scale - 0.04);
+      hp = Math.round(hp * 0.9);
+    } else if (arch.focus === 'bruiser') {
+      dmg = Math.round(dmg * 1.45);
+      speed += 0.18;
+      scale += 0.06;
+    }
+
+    return {
+      variantId:`bossWave${wave}`,
+      entryId:arch.entryId,
+      name:`${arch.name} · đợt ${wave}`,
+      icon:arch.icon,
+      focus:arch.focus,
+      focusLabel:arch.focusLabel,
+      hp,
+      defense,
+      speed:Math.min(4.35, speed),
+      dmg,
+      scale:Math.min(1.9, scale),
+      gem,
+      wave,
+    };
+  }
+
+  async spawnEscalatingBoss(wave) {
+    const event = this.buildBossEvent(wave);
+    this.flashEvent(`${event.icon} Boss đợt ${wave}: ${event.name} (${event.focusLabel})`, 4.4);
+    this.toast(`${event.icon} ${event.name}`);
+    await this.spawnBoss(event);
   }
 
   async spawnBoss(event) {
@@ -1520,8 +1674,10 @@ export class SurvivorGame {
     enemy.visualScale = event.scale;
     enemy.radius *= event.scale * 1.15;
     enemy.isBoss = true;
+    enemy.bossWave = event.wave || 1;
     enemy.bossName = event.name;
     enemy.bossIcon = event.icon;
+    enemy.bossFocus = event.focus;
     enemy.spawn = 0;
     enemy.hitFlash = 0;
     enemy.slowT = 0;
@@ -1556,7 +1712,13 @@ export class SurvivorGame {
       drop.life -= dt;
       drop.phase += dt * 3.2;
       // Sprite bình máu tự billboard — chỉ nhún, không xoay group.
-      if (!drop.isPotion) drop.mesh.rotation.y += dt * 2.4;
+      // Thẻ kỹ năng xoay nhanh để nổi bật trên map.
+      if (drop.isSkillCard) {
+        drop.mesh.rotation.y += dt * 4.6;
+        if (drop.card) drop.card.rotation.y += dt * 1.8;
+      } else if (!drop.isPotion) {
+        drop.mesh.rotation.y += dt * 2.4;
+      }
       drop.mesh.position.y = 0.55 + Math.sin(drop.phase) * 0.12;
       if (drop.halo?.material) {
         drop.halo.material.opacity = 0.35 + Math.sin(drop.phase * 1.4) * 0.2;
@@ -1564,11 +1726,8 @@ export class SurvivorGame {
       if (drop.life < 4) drop.mesh.scale.setScalar(0.75 + Math.sin(drop.phase * 8) * 0.12);
       const dx = drop.mesh.position.x - this.hero.root.position.x;
       const dz = drop.mesh.position.z - this.hero.root.position.z;
-      if (dx * dx + dz * dz < (this.hero.radius + 0.7) ** 2) {
-        drop.def.apply(this);
-        // fieldHeal đã toast qua grantHealthPotion — tránh báo trùng.
-        if (drop.def.id !== 'fieldHeal') this.toast(`${drop.def.icon} ${drop.def.name}`);
-        this.flashEvent(`${drop.def.icon} Nhặt được: ${drop.def.name}`, 2.4);
+      if (dx * dx + dz * dz < (this.hero.radius + 0.75) ** 2) {
+        this.collectFieldDrop(drop);
         drop.dead = true;
         this.updateHud();
       } else if (drop.life <= 0) {
@@ -1583,6 +1742,111 @@ export class SurvivorGame {
     this.fieldDrops = this.fieldDrops.filter(drop => !drop.dead);
   }
 
+  collectFieldDrop(drop) {
+    if (drop.isSkillCard && drop.skill) {
+      this.grantSkillUpgrade(drop.skill);
+      return;
+    }
+    if (drop.def?.apply) drop.def.apply(this);
+    // fieldHeal đã toast qua grantHealthPotion — tránh báo trùng.
+    if (drop.def?.id !== 'fieldHeal') {
+      this.toast(`${drop.def.icon} ${drop.def.name}`);
+    }
+    this.flashEvent(`${drop.def.icon} Nhặt được: ${drop.def.name}`, 2.4);
+  }
+
+  /** Chọn thẻ kỹ năng còn nâng cấp được (ưu tiên chưa có). */
+  pickRandomSkillUpgrade() {
+    const available = SPECIAL_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
+    if (!available.length) return null;
+    const fresh = available.filter(card => !(this.upgradeLevels[card.id]));
+    const pool = fresh.length ? fresh : available;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  grantSkillUpgrade(skill) {
+    if (!skill) {
+      this.attrPoints++;
+      this.updateAttrBadge();
+      this.renderAttrRows();
+      this.toast('◎ +1 điểm thuộc tính (thẻ đã max)');
+      this.flashEvent('◎ Đổi thẻ thành điểm thuộc tính', 2.4);
+      return;
+    }
+    const level = this.upgradeLevels[skill.id] || 0;
+    if (level >= skill.max) {
+      this.attrPoints++;
+      this.updateAttrBadge();
+      this.renderAttrRows();
+      this.toast(`◎ ${skill.name} đã max · +1 điểm`);
+      this.flashEvent('◎ Đổi thẻ thành điểm thuộc tính', 2.4);
+      return;
+    }
+    this.upgradeLevels[skill.id] = level + 1;
+    skill.apply(this);
+    this.checkSynergies();
+    this.toast(`${skill.icon} ${skill.name} cấp ${this.upgradeLevels[skill.id]}`);
+    this.flashEvent(`${skill.icon} Nhặt thẻ: ${skill.name}`, 2.8);
+  }
+
+  placeFieldDropGroup(group) {
+    let placed = false;
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 4 + Math.random() * Math.max(3, this.arenaRadius - 5);
+      group.position.set(Math.cos(a) * r, 0.55, Math.sin(a) * r);
+      const dx = group.position.x - this.hero.root.position.x;
+      const dz = group.position.z - this.hero.root.position.z;
+      if (dx * dx + dz * dz > 16 && group.position.length() < this.arenaRadius - 1.2) {
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const a = Math.random() * Math.PI * 2;
+      group.position.set(Math.cos(a) * (this.arenaRadius * 0.55), 0.55, Math.sin(a) * (this.arenaRadius * 0.55));
+    }
+  }
+
+  spawnSkillCardDrop(worldPos, skillOverride = null) {
+    if (!this.scene) return;
+    const skill = skillOverride || this.pickRandomSkillUpgrade();
+    const def = FIELD_DROPS.find(item => item.id === 'fieldSkill') || {
+      id:'fieldSkill', icon:'🃏', color:0xf59e0b, name:'Thẻ kỹ năng',
+    };
+    const life = 22 + Math.random() * 10;
+    const group = new THREE.Group();
+    const card = createSkillCardMesh(skill || { id:'generic', icon:'🃏', name:'Thẻ kỹ năng', color:0xf59e0b });
+    card.position.y = 0.18;
+    group.add(card);
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(0.42, 0.62, 28),
+      new THREE.MeshBasicMaterial({
+        color:skill?.color || 0xf59e0b, transparent:true, opacity:0.55, depthWrite:false, side:THREE.DoubleSide,
+      })
+    );
+    halo.rotation.x = -Math.PI / 2;
+    group.add(halo);
+    if (worldPos) {
+      const ox = (Math.random() - 0.5) * 1.4;
+      const oz = (Math.random() - 0.5) * 1.4;
+      group.position.set(worldPos.x + ox, 0.55, worldPos.z + oz);
+      if (group.position.length() > this.arenaRadius - 1.2) {
+        group.position.setLength(this.arenaRadius - 1.2);
+        group.position.y = 0.55;
+      }
+    } else {
+      this.placeFieldDropGroup(group);
+    }
+    this.scene.add(group);
+    this.fieldDrops.push({
+      mesh:group, halo, card, def, skill, life,
+      phase:Math.random() * 6, dead:false,
+      isPotion:false, isSkillCard:true,
+    });
+    return skill;
+  }
+
   spawnFieldDrop() {
     if (!this.scene || !this.hero) return;
     let def = FIELD_DROPS[Math.floor(Math.random() * FIELD_DROPS.length)];
@@ -1590,6 +1854,14 @@ export class SurvivorGame {
     if ((this.attrs.luck || 0) > 0 && Math.random() < this.attrs.luck * 0.03) {
       def = FIELD_DROPS.find(item => item.id === 'fieldAttr') || def;
     }
+
+    if (def.kind === 'skillCard') {
+      const skill = this.spawnSkillCardDrop(null);
+      const label = skill ? `${skill.icon} ${skill.name}` : def.name;
+      this.flashEvent(`🃏 Thẻ kỹ năng xuất hiện: ${label}`, 2.8);
+      return;
+    }
+
     const life = 15 + Math.random() * 15;
     const group = new THREE.Group();
     let halo = null;
@@ -1619,27 +1891,13 @@ export class SurvivorGame {
     }
     halo.rotation.x = -Math.PI / 2;
     group.add(halo);
-    let placed = false;
-    for (let i = 0; i < 20; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 4 + Math.random() * Math.max(3, this.arenaRadius - 5);
-      group.position.set(Math.cos(a) * r, 0.55, Math.sin(a) * r);
-      const dx = group.position.x - this.hero.root.position.x;
-      const dz = group.position.z - this.hero.root.position.z;
-      if (dx * dx + dz * dz > 16 && group.position.length() < this.arenaRadius - 1.2) {
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) {
-      const a = Math.random() * Math.PI * 2;
-      group.position.set(Math.cos(a) * (this.arenaRadius * 0.55), 0.55, Math.sin(a) * (this.arenaRadius * 0.55));
-    }
+    this.placeFieldDropGroup(group);
     this.scene.add(group);
     this.fieldDrops.push({
       mesh:group, halo, def, life,
       phase:Math.random() * 6, dead:false,
       isPotion: def.id === 'fieldHeal',
+      isSkillCard:false,
     });
     this.flashEvent(`${def.icon} Phần thưởng xuất hiện trên bản đồ!`, 2.8);
   }
@@ -2157,13 +2415,17 @@ export class SurvivorGame {
       this.spawnGem(enemy.root.position, enemy.gem);
       this.maybeSpawnPotion(enemy);
       if (enemy.isBoss) {
+        const wave = enemy.bossWave || 1;
+        const attrReward = 1 + Math.floor((wave - 1) / 3);
         this.spawnGem(enemy.root.position, Math.max(12, Math.round(enemy.gem * 0.5)));
-        this.attrPoints++;
+        this.attrPoints += attrReward;
         this.updateAttrBadge();
         this.renderAttrRows();
-        this.toast(`${enemy.bossIcon || '★'} Hạ ${enemy.bossName || 'Boss'}! +1 điểm`);
-        this.flashEvent(`${enemy.bossIcon || '★'} Boss bị đánh bại!`, 3.5);
-        this.grantXp(18);
+        const skill = this.spawnSkillCardDrop(enemy.root.position);
+        const skillHint = skill ? ` · thẻ ${skill.name}` : '';
+        this.toast(`${enemy.bossIcon || '★'} Hạ ${enemy.bossName || 'Boss'}! +${attrReward} điểm${skillHint}`);
+        this.flashEvent(`${enemy.bossIcon || '★'} Boss đợt ${wave} bị đánh bại! +${attrReward} điểm`, 3.8);
+        this.grantXp(14 + wave * 6);
       }
     }
   }
