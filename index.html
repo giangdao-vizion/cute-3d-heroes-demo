@@ -6,6 +6,7 @@
 <title>Cute Heroes – Chọn cuộc phiêu lưu</title>
 <meta name="theme-color" content="#2b2340">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Cute Heroes">
 <link rel="icon" href="favicon.ico" sizes="any">
@@ -257,6 +258,8 @@
   .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin:12px 0 0; }
   .stats div { background:#fff; border-radius:12px; padding:4px; font-size:18px; } .stats b { display:block; font-size:20px; }
   .hidden { display:none !important; }
+  /* Sinh tồn trong iframe: giữ Home Screen standalone, không nhảy sang Safari. */
+  #survivorFrame { position:fixed; inset:0; width:100%; height:100%; border:0; z-index:80; background:#9fd8ff; }
   @media (max-width: 560px) { header button { padding:5px 7px; font-size:12px; white-space:nowrap; } }
   @media (max-width: 760px) { #panel { top:auto; height:42%; left:8px; right:8px; width:auto; } }
   @media (min-width:700px) {

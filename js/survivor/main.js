@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeRenderer } from '../engine.js';
 import { SurvivorGame } from './survivor.js';
+import { bindLobbyLinks } from '../lobby-nav.js';
 
 const $ = id => document.getElementById(id);
 const renderer = makeRenderer($('c'));
@@ -71,6 +72,7 @@ try {
       <div class="actions"><button id="retry">Thử lại</button><a class="alt" href="index.html">Về sảnh</a></div>
     </div>`;
   ui.loading.querySelector('#retry').onclick = () => location.reload();
+  bindLobbyLinks(ui.loading);
 }
 
 window.__survivor = game;

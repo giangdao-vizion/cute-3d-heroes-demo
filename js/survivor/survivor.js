@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { byId } from '../catalog.js';
 import { selection } from '../state.js';
 import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower } from '../engine.js';
+import { bindLobbyLinks } from '../lobby-nav.js';
 
 const ARENA = 27;
 const ENEMY_CAP = 55;
@@ -1001,6 +1002,7 @@ export class SurvivorGame {
       this.ui.modal.innerHTML = `<div class="box"><h2>Tạm dừng</h2><p>Trận đấu đang được đóng băng.</p><div class="actions"><button id="resume">Tiếp tục</button><a class="alt" href="index.html">Về sảnh</a></div></div>`;
       this.ui.modal.classList.remove('hidden');
       this.ui.modal.querySelector('#resume').onclick = () => this.togglePause();
+      bindLobbyLinks(this.ui.modal);
     } else if (this.state === 'paused') {
       this.state = 'playing';
       this.ui.modal.classList.add('hidden');
@@ -1033,6 +1035,7 @@ export class SurvivorGame {
         </div>`;
       this.ui.modal.classList.remove('hidden');
       this.ui.modal.querySelector('#restart').onclick = () => this.restart();
+      bindLobbyLinks(this.ui.modal);
     }, 650);
   }
 
@@ -1055,6 +1058,7 @@ export class SurvivorGame {
           <div class="actions"><button id="retry">Tải lại</button><a class="alt" href="index.html">Về sảnh</a></div>
         </div>`;
       this.ui.loading.querySelector('#retry').onclick = () => location.reload();
+      bindLobbyLinks(this.ui.loading);
     }
   }
 
