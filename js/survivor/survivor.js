@@ -320,19 +320,84 @@ function disposeFieldDropVisual(mesh) {
   });
 }
 
+function fmtPct(ratio) {
+  return `${Math.round(ratio * 100)}%`;
+}
+
+function fmtMult(ratio) {
+  const text = ratio.toFixed(2).replace(/\.?0+$/, '');
+  return `×${text}`;
+}
+
 /** Chỉ số cơ bản — cộng bằng điểm thuộc tính trong bảng nhân vật. */
 const ATTR_DEFS = [
-  { id:'str', icon:'⚔', name:'Sức mạnh', desc:'+12% sát thương mỗi điểm', max:12 },
-  { id:'agi', icon:'👟', name:'Tốc độ', desc:'+8% tốc độ chạy mỗi điểm', max:12 },
-  { id:'vit', icon:'♥', name:'Sinh lực', desc:'+22 máu tối đa mỗi điểm', max:12 },
-  { id:'def', icon:'⬟', name:'Phòng thủ', desc:'Giảm 6% sát thương nhận mỗi điểm', max:10 },
-  { id:'cri', icon:'✴', name:'Chí mạng', desc:'+4% tỉ lệ chí mạng mỗi điểm', max:10 },
-  { id:'vamp', icon:'🩸', name:'Hút máu', desc:'Hồi 2% sát thương gây ra mỗi điểm', max:8 },
-  { id:'pull', icon:'🧲', name:'Hút ngọc', desc:'+10% tầm hút ngọc mỗi điểm', max:8 },
-  { id:'luck', icon:'🍀', name:'May mắn', desc:'+8% XP ngọc & vật phẩm map xuất hiện nhanh hơn', max:8 },
-  { id:'regen', icon:'🌿', name:'Hồi phục', desc:'+0.45 máu/giây mỗi điểm khi không vừa bị đánh', max:8 },
-  { id:'mass', icon:'🪨', name:'Khối lượng', desc:'Giảm 8% đẩy lùi mỗi điểm', max:8 },
-  { id:'elite', icon:'👑', name:'Tinh anh', desc:'+8% sát thương lên boss/elite mỗi điểm', max:10 },
+  {
+    id:'str', icon:'⚔', name:'Sức mạnh', max:12,
+    desc:'Mỗi điểm +12% sát thương gây ra',
+    value:g => `Hiện tại ${fmtMult(1 + (g.attrs.str || 0) * 0.12)} sát thương`,
+  },
+  {
+    id:'agi', icon:'👟', name:'Tốc độ', max:12,
+    desc:'Mỗi điểm +8% tốc độ chạy',
+    value:g => {
+      const mult = 1 + (g.attrs.agi || 0) * 0.08;
+      const speed = (g.hero?.baseSpeed || 0) * mult;
+      return `Hiện tại ${speed.toFixed(1)} tốc chạy (${fmtMult(mult)})`;
+    },
+  },
+  {
+    id:'vit', icon:'♥', name:'Sinh lực', max:12,
+    desc:'Mỗi điểm +22 máu tối đa',
+    value:g => `Hiện tại ${Math.round(g.hero?.maxHp || 0)} máu tối đa`,
+  },
+  {
+    // Giáp lũy tiến: mỗi điểm nhận thêm ×0.94 sát thương — không bao giờ về 0.
+    id:'def', icon:'⬟', name:'Phòng thủ', max:10,
+    desc:'Mỗi điểm nhận thêm ×0.94 sát thương (giảm dần, không miễn nhiễm)',
+    value:g => {
+      const keep = Math.pow(0.94, g.attrs.def || 0);
+      return `Hiện tại nhận ${fmtPct(keep)} sát thương (−${fmtPct(1 - keep)})`;
+    },
+  },
+  {
+    id:'cri', icon:'✴', name:'Chí mạng', max:10,
+    desc:'Mỗi điểm +4% tỉ lệ chí mạng (tối đa 55%)',
+    value:g => {
+      const chance = Math.min(0.55, (g.attrs.cri || 0) * 0.04);
+      const mult = 1.55 + (g.attrs.cri || 0) * 0.03;
+      return `Hiện tại ${fmtPct(chance)} chí mạng · ${fmtMult(mult)}`;
+    },
+  },
+  {
+    id:'vamp', icon:'🩸', name:'Hút máu', max:8,
+    desc:'Mỗi điểm hồi 2% sát thương gây ra',
+    value:g => `Hiện tại hút ${fmtPct((g.attrs.vamp || 0) * 0.02)} sát thương gây ra`,
+  },
+  {
+    id:'pull', icon:'🧲', name:'Hút ngọc', max:8,
+    desc:'Mỗi điểm +10% tầm hút ngọc',
+    value:g => `Hiện tại tầm hút ${fmtMult(1 + (g.attrs.pull || 0) * 0.1)}`,
+  },
+  {
+    id:'luck', icon:'🍀', name:'May mắn', max:8,
+    desc:'Mỗi điểm +8% XP từ ngọc & vật phẩm map nhanh hơn',
+    value:g => `Hiện tại XP ngọc ${fmtMult(1 + (g.attrs.luck || 0) * 0.08)}`,
+  },
+  {
+    id:'regen', icon:'🌿', name:'Hồi phục', max:8,
+    desc:'Mỗi điểm +0.45 máu/giây khi không vừa bị đánh',
+    value:g => `Hiện tại +${((g.attrs.regen || 0) * 0.45).toFixed(2)} máu/giây`,
+  },
+  {
+    id:'mass', icon:'🪨', name:'Khối lượng', max:8,
+    desc:'Mỗi điểm giảm 8% đẩy lùi (tối đa 75%)',
+    value:g => `Hiện tại giảm đẩy lùi ${fmtPct(Math.min(0.75, (g.attrs.mass || 0) * 0.08))}`,
+  },
+  {
+    id:'elite', icon:'👑', name:'Tinh anh', max:10,
+    desc:'Mỗi điểm +8% sát thương lên boss/elite',
+    value:g => `Hiện tại ${fmtMult(1 + (g.attrs.elite || 0) * 0.08)} lên boss/elite`,
+  },
 ];
 
 /** Phần thưởng lên cấp: kỹ năng bổ trợ (không gồm chỉ số cơ bản). */
@@ -1205,12 +1270,13 @@ export class SurvivorGame {
       const level = this.attrs[def.id] || 0;
       const full = level >= def.max;
       const can = this.attrPoints > 0 && !full;
+      const current = typeof def.value === 'function' ? def.value(this) : '';
       return `<div class="attr-row">
         <div class="attr-icon">${def.icon}</div>
         <div class="attr-copy">
-          <b>${def.name}</b>
+          <b>${def.name} <span class="attr-lv">Cấp ${level}/${def.max}</span></b>
+          <strong class="attr-now">${current}</strong>
           <small>${def.desc}</small>
-          <em>Cấp ${level}/${def.max}</em>
         </div>
         <button class="attr-plus" type="button" data-attr="${def.id}" ${can ? '' : 'disabled'} aria-label="Cộng ${def.name}">+</button>
       </div>`;
