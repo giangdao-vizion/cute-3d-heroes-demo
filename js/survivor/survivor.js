@@ -629,21 +629,22 @@ const ATTR_DEFS = [
   },
 ];
 
-/** Phần thưởng lên cấp: kỹ năng bổ trợ (không gồm chỉ số cơ bản). */
+/** Phần thưởng lên cấp: kỹ năng bổ trợ (không gồm chỉ số cơ bản).
+ *  stats: 1–2 dòng viết tắt tiếng Anh, hiện dưới icon trên thẻ. */
 const SPECIAL_UPGRADES = [
-  { id:'rate', icon:'✦', name:'Liên hoàn', desc:'+18% tốc độ tấn công', max:5, apply:g => { g.power.interval /= 1.18; } },
-  { id:'multi', icon:'➹', name:'Đa mục tiêu', desc:'+1 tia đạn mỗi lượt', max:3, apply:g => { g.power.multi++; } },
-  { id:'pierce', icon:'➤', name:'Xuyên phá', desc:'Đạn xuyên thêm 1 quái', max:3, apply:g => { g.power.pierce++; } },
-  { id:'size', icon:'◉', name:'Đạn khổng lồ', desc:'+25% kích thước và vùng trúng', max:4, apply:g => { g.power.size *= 1.25; } },
-  { id:'magnet', icon:'◆', name:'Nam châm', desc:'+35% phạm vi hút ngọc', max:4, apply:g => { g.power.magnet *= 1.35; g.updateMagnetRing(); } },
-  { id:'range', icon:'◎', name:'Tầm bắn', desc:'+15% tầm bắn', max:5, apply:g => { g.power.range *= 1.15; g.updateRangeRing(); } },
-  { id:'chain', icon:'ϟ', name:'Sét lan', desc:'Tia sét lan thêm 1 quái gần đó', max:4, apply:g => { g.power.chain++; } },
-  { id:'blast', icon:'✹', name:'Nổ lan', desc:'Fireball gây nổ quanh mục tiêu', max:4, apply:g => { g.power.blast++; } },
-  { id:'freeze', icon:'❄', name:'Băng giá', desc:'Làm chậm, có cơ hội đóng băng quái', max:4, apply:g => { g.power.freeze++; } },
-  { id:'burnAura', icon:'🔥', name:'Vòng lửa', desc:'Thiêu đốt quái đi vào vòng quanh bạn', max:5, apply:g => { g.power.burnAura++; g.updateBurnAura(); } },
+  { id:'rate', icon:'✦', name:'Liên hoàn', stats:['+18% ATK SPD'], max:5, apply:g => { g.power.interval /= 1.18; } },
+  { id:'multi', icon:'➹', name:'Đa mục tiêu', stats:['+1 MULTI'], max:3, apply:g => { g.power.multi++; } },
+  { id:'pierce', icon:'➤', name:'Xuyên phá', stats:['+1 PIERCE'], max:3, apply:g => { g.power.pierce++; } },
+  { id:'size', icon:'◉', name:'Đạn khổng lồ', stats:['+25% SIZE'], max:4, apply:g => { g.power.size *= 1.25; } },
+  { id:'magnet', icon:'◆', name:'Nam châm', stats:['+35% MAGNET'], max:4, apply:g => { g.power.magnet *= 1.35; g.updateMagnetRing(); } },
+  { id:'range', icon:'◎', name:'Tầm bắn', stats:['+15% RANGE'], max:5, apply:g => { g.power.range *= 1.15; g.updateRangeRing(); } },
+  { id:'chain', icon:'ϟ', name:'Sét lan', stats:['+1 CHAIN'], max:4, apply:g => { g.power.chain++; } },
+  { id:'blast', icon:'✹', name:'Nổ lan', stats:['+1 BLAST'], max:4, apply:g => { g.power.blast++; } },
+  { id:'freeze', icon:'❄', name:'Băng giá', stats:['+SLOW', '+FREEZE%'], max:4, apply:g => { g.power.freeze++; } },
+  { id:'burnAura', icon:'🔥', name:'Vòng lửa', stats:['BURN AURA'], max:5, apply:g => { g.power.burnAura++; g.updateBurnAura(); } },
   {
     id:'orbit', icon:'🌀', name:'Vòng xoáy',
-    desc:'3 vòng bay quanh bạn · cấp cao bay xa & sát thương mạnh hơn',
+    stats:['+ORBIT', '+DMG'],
     max:5, apply:g => { g.power.orbit++; g.updateOrbit(); },
   },
 ];
@@ -652,7 +653,7 @@ const SPECIAL_UPGRADES = [
 const RISK_UPGRADES = [
   {
     id:'riskPower', icon:'⚖', name:'Giao kèo máu', kind:'risk', max:1,
-    desc:'+45% sát thương · −20% máu tối đa',
+    stats:['+45% ATK', '-20% MAX HP'],
     apply:g => {
       g.power.damageBonus *= 1.45;
       g.hero.baseMaxHp = Math.max(80, Math.round(g.hero.baseMaxHp * 0.8));
@@ -662,7 +663,7 @@ const RISK_UPGRADES = [
   },
   {
     id:'riskGlass', icon:'🪞', name:'Thủy tinh sắc', kind:'risk', max:1,
-    desc:'+1 xuyên phá · nhận thêm 25% sát thương',
+    stats:['+1 PIERCE', '+25% DMG TAKEN'],
     apply:g => {
       g.power.pierce++;
       g.power.takenDamageMult *= 1.25;
@@ -670,7 +671,7 @@ const RISK_UPGRADES = [
   },
   {
     id:'riskSwift', icon:'💨', name:'Gió đổi mạng', kind:'risk', max:1,
-    desc:'+22% tốc chạy · −12% tầm bắn',
+    stats:['+22% SPEED', '-12% RANGE'],
     apply:g => {
       g.hero.baseSpeed *= 1.22;
       g.power.range *= 0.88;
@@ -703,8 +704,8 @@ const SYNERGY_DEFS = [
 const ATTR_POINT_CARD = {
   id:'attrPoint',
   icon:'◎',
-  name:'Điểm thuộc tính',
-  desc:'+1 điểm để cộng trong bảng nhân vật',
+  name:'Thuộc tính',
+  stats:['+1 ATTR'],
   kind:'attr',
   max:999,
 };
@@ -2778,27 +2779,33 @@ export class SurvivorGame {
     this.clearMovement();
     this.hand = this.buildLevelUpHand();
     this.ui.modal.innerHTML = `
-      <div class="box">
-        <h2>✨ Lên cấp ${this.level}!</h2>
-        <p>Chọn kỹ năng bổ trợ hoặc điểm thuộc tính</p>
-        <div class="cards">${this.hand.map((card, i) => {
-          const levelLabel = card.kind === 'attr'
-            ? 'Điểm +1'
-            : card.kind === 'risk'
-              ? 'Rủi ro'
-              : `Cấp ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
-          return `<button class="card ${card.kind === 'risk' ? 'risk' : ''}" data-card="${i}">
-            <span class="icon">${card.icon}</span><b>${card.name}</b>
-            <small>${card.desc}</small>
-            <em>${levelLabel}</em>
-          </button>`;
-        }).join('')}</div>
-        <p>Phím 1 · 2 · 3</p>
+      <div class="box levelup-box">
+        <h2>Lv ${this.level}</h2>
+        <div class="cards">${this.hand.map((card, i) => this.renderUpgradeCard(card, i)).join('')}</div>
+        <p class="levelup-hint">1 · 2 · 3</p>
       </div>`;
     this.ui.modal.classList.remove('hidden');
     this.ui.modal.querySelectorAll('[data-card]').forEach(button => {
       button.onclick = () => this.chooseUpgrade(Number(button.dataset.card));
     });
+  }
+
+  /** Thẻ nâng cấp: tên trên · icon lớn giữa · 1–2 dòng stat EN dưới. */
+  renderUpgradeCard(card, index) {
+    const kind = card.kind === 'risk' ? 'risk' : card.kind === 'attr' ? 'attr' : '';
+    const levelLabel = card.kind === 'attr'
+      ? 'ATTR'
+      : card.kind === 'risk'
+        ? 'RISK'
+        : `Lv ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
+    const stats = (card.stats || []).slice(0, 2);
+    const statsHtml = stats.map(line => `<span class="stat">${line}</span>`).join('');
+    return `<button class="card ${kind}" data-card="${index}" type="button">
+      <span class="card-name">${card.name}</span>
+      <span class="icon" aria-hidden="true">${card.icon}</span>
+      <span class="stats">${statsHtml}</span>
+      <em class="card-lv">${levelLabel}</em>
+    </button>`;
   }
 
   chooseUpgrade(index) {
