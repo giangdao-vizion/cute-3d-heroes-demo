@@ -4,20 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Đấu Trường Sinh Tồn – Cute 3D Heroes</title>
+<meta name="theme-color" content="#2b2340">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cute Heroes">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="mask-icon" href="safari-pinned-tab.svg" color="#2b2340">
+<link rel="manifest" href="site.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
   :root { --ink:#2b2340; --card:#fffaf2; --accent:#ff7a59; --purple:#7c3aed; }
   * { box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
-  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#9fd8ff; font-family:'Baloo 2',system-ui,sans-serif; color:var(--ink); touch-action:none; }
+  html { height:100%; height:100dvh; }
+  html, body { margin:0; width:100%; min-height:100%; min-height:100dvh; min-height:-webkit-fill-available; overflow:hidden; background:#9fd8ff; font-family:'Baloo 2',system-ui,sans-serif; color:var(--ink); touch-action:none; }
+  body { position:fixed; inset:0; width:100%; height:100%; height:100dvh; }
   button, a { font:inherit; }
-  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  canvas#c { position:fixed; inset:0; width:100%; width:100dvw; height:100%; height:100dvh; display:block; touch-action:none; }
   .hidden { display:none !important; }
+  #enemyLabels { position:fixed; inset:0; z-index:2; overflow:hidden; pointer-events:none; }
+  .enemy-hp { position:absolute; left:0; top:0; width:54px; height:12px; overflow:hidden; border:1.5px solid rgba(255,255,255,.95); border-radius:99px; background:rgba(43,35,64,.78); box-shadow:0 2px 5px rgba(0,0,0,.25); transform:translate3d(-100px,-100px,0); will-change:transform; }
+  .enemy-hp i { display:block; width:100%; height:100%; background:linear-gradient(90deg,#ef4444,#fb7185); transform-origin:left center; }
+  .enemy-hp b { position:absolute; inset:0; display:grid; place-items:center; color:#fff; font:800 9px/1 'Baloo 2',system-ui; text-align:center; text-shadow:0 1px 2px #000; }
 
   #hud { position:fixed; inset:0; z-index:3; pointer-events:none; padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom); color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.35); }
   .top { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:10px; right:10px; display:grid; grid-template-columns:minmax(100px,1fr) auto minmax(100px,1fr); align-items:start; gap:8px; }
-  .hero { width:min(240px,38vw); padding:7px 10px; border-radius:16px; background:rgba(43,35,64,.78); box-shadow:0 4px 14px rgba(0,0,0,.2); }
-  #heroName { font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hero { position:relative; width:min(240px,38vw); padding:7px 10px; border:0; border-radius:16px; background:rgba(43,35,64,.78); box-shadow:0 4px 14px rgba(0,0,0,.2); color:#fff; font:inherit; text-align:left; pointer-events:auto; cursor:pointer; -webkit-tap-highlight-color:transparent; appearance:none; }
+  .hero:active { transform:scale(.98); }
+  .hero::after { content:'Thuộc tính'; position:absolute; right:8px; top:6px; padding:1px 6px; border-radius:99px; background:rgba(255,255,255,.14); color:rgba(255,255,255,.82); font-size:9px; font-weight:800; letter-spacing:.02em; }
+  #heroName { font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:64px; }
   .bar { height:12px; background:rgba(0,0,0,.32); border:2px solid rgba(255,255,255,.9); border-radius:99px; overflow:hidden; }
   .bar i { display:block; width:100%; height:100%; transition:width .15s; }
   .hp i { background:linear-gradient(90deg,#22c55e,#4ade80); }
@@ -27,6 +46,29 @@
   .score { justify-self:end; padding:5px 10px; border-radius:14px; background:rgba(43,35,64,.75); font-weight:800; text-align:right; }
   .score span { display:block; white-space:nowrap; }
   #pause { position:absolute; right:12px; top:calc(82px + env(safe-area-inset-top)); width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
+  #attrBadge { position:absolute; left:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; z-index:1; }
+  #attrSheet { position:fixed; inset:0; z-index:9; display:flex; align-items:flex-end; justify-content:center; padding:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom)); background:rgba(43,35,64,.45); touch-action:manipulation; }
+  #attrSheet .sheet { width:min(440px,100%); max-height:min(84dvh,640px); overflow:auto; padding:16px 16px 18px; border-radius:24px 24px 18px 18px; background:var(--card); box-shadow:0 -12px 40px rgba(0,0,0,.28); }
+  #attrSheet .sheet-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  #attrSheet .sheet-head h2 { margin:0; font-size:24px; line-height:1; }
+  #attrSheet .points { padding:3px 10px; border-radius:99px; background:#efe6ff; color:#6d28d9; font-weight:800; font-size:13px; white-space:nowrap; }
+  .attr-row { display:grid; grid-template-columns:40px minmax(0,1fr) auto; align-items:center; gap:8px; padding:8px; margin-top:6px; border:2px solid #eee3d3; border-radius:14px; background:#fff; text-align:left; }
+  .attr-icon { width:40px; height:40px; display:grid; place-items:center; border-radius:12px; background:#f3e8ff; font-size:22px; }
+  .attr-copy b { display:block; font-size:16px; line-height:1.1; }
+  .attr-copy small { display:block; color:#6b6280; font-size:12px; line-height:1.25; }
+  .attr-copy em { display:inline-block; margin-top:3px; color:#7c3aed; font-size:12px; font-style:normal; font-weight:800; }
+  .attr-plus { width:42px; height:42px; border:0; border-radius:14px; background:var(--accent); color:#fff; font-size:24px; font-weight:800; cursor:pointer; }
+  .attr-plus:disabled { opacity:.35; cursor:default; }
+  #attrClose { min-width:0; padding:8px 14px; border:0; border-radius:12px; background:#e6dccb; color:var(--ink); font-weight:800; cursor:pointer; }
+  #enemyIntro { position:absolute; right:62px; top:calc(82px + env(safe-area-inset-top)); width:min(230px,62vw); padding:8px 10px; border:2px solid rgba(255,255,255,.9); border-radius:16px; background:rgba(255,250,242,.94); color:var(--ink); text-shadow:none; box-shadow:0 7px 20px rgba(43,35,64,.24); opacity:0; transform:translateX(14px) scale(.94); transform-origin:top right; transition:opacity .22s ease,transform .22s ease; }
+  #enemyIntro.show { opacity:1; transform:none; }
+  .enemy-head { display:flex; align-items:center; gap:7px; }
+  .enemy-icon { width:36px; height:36px; display:grid; place-items:center; flex:0 0 auto; border-radius:11px; background:#fee2e2; font-size:22px; }
+  .enemy-title { min-width:0; text-align:left; line-height:1.05; }
+  .enemy-title small { display:block; color:#ef4444; font-size:9px; font-weight:800; letter-spacing:.08em; }
+  .enemy-title b { display:block; overflow:hidden; font-size:15px; text-overflow:ellipsis; white-space:nowrap; }
+  .enemy-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; margin-top:6px; }
+  .enemy-stats span { min-width:0; padding:2px 3px; overflow:hidden; border-radius:99px; background:#f3e8ff; color:#5b526d; font-size:11px; font-weight:800; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
   .xp { position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); height:14px; border-radius:99px; background:rgba(43,35,64,.58); border:2px solid #fff; overflow:visible; }
   .xp i { display:block; height:100%; width:0; border-radius:99px; background:linear-gradient(90deg,#8b5cf6,#d8b4fe); transition:width .2s; }
   #level { position:absolute; left:-2px; top:50%; transform:translateY(-50%); min-width:42px; padding:1px 8px; border-radius:99px; background:#7c3aed; border:2px solid #fff; color:#fff; font-size:13px; font-weight:800; text-align:center; }
@@ -52,6 +94,9 @@
   .card b { display:block; margin:5px 0 2px; font-size:17px; }
   .card small { display:block; color:#6b6280; font-size:13px; line-height:1.25; }
   .card em { display:inline-block; margin-top:7px; padding:1px 8px; border-radius:99px; background:#efe6ff; color:#6d28d9; font-size:12px; font-style:normal; font-weight:800; }
+  .card.risk { border-color:#f59e0b; box-shadow:0 5px 0 #f59e0b; background:#fff7ed; }
+  .card.risk em { background:#ffedd5; color:#c2410c; }
+  #eventBanner { position:absolute; left:50%; bottom:calc(34px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:min(92vw,420px); padding:7px 14px; border:2px solid rgba(255,255,255,.92); border-radius:99px; background:rgba(43,35,64,.82); color:#fff; font-size:14px; font-weight:800; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; }
   .actions { display:flex; justify-content:center; flex-wrap:wrap; gap:9px; margin-top:15px; }
   .actions button, .actions a { min-width:128px; padding:9px 18px; border:0; border-radius:14px; background:var(--accent); color:#fff; font-weight:800; font-size:18px; cursor:pointer; text-decoration:none; }
   .actions .alt { background:#e6dccb; color:var(--ink); }
@@ -69,6 +114,11 @@
     .hero { width:34vw; padding:5px 7px; }
     #heroName { font-size:13px; }
     .timer { min-width:86px; padding:3px 9px; font-size:23px; }
+    #enemyIntro { right:58px; top:calc(74px + env(safe-area-inset-top)); width:min(215px,60vw); padding:7px 8px; }
+    #pause { top:calc(74px + env(safe-area-inset-top)); width:38px; height:38px; }
+    .hero::after { font-size:8px; right:6px; top:5px; }
+    .enemy-stats { gap:3px; }
+    .enemy-stats span { font-size:10px; padding-inline:2px; }
     .score { font-size:13px; padding:4px 7px; }
     .cards { gap:6px; }
     .card { min-height:150px; padding:10px 4px; }
@@ -86,20 +136,38 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="enemyLabels"></div>
 
 <div id="hud" class="hidden">
   <div class="top">
-    <div class="hero">
+    <button type="button" class="hero" id="heroPanel" aria-label="Mở bảng thuộc tính">
+      <span id="attrBadge" class="hidden">0</span>
       <div id="heroName">Anh hùng</div>
       <div class="bar hp"><i id="hpFill"></i></div>
       <span id="hpText"></span>
-    </div>
-    <div class="timer"><span id="timer">00:00</span><small>SỐNG SÓT</small></div>
+    </button>
+    <div class="timer"><span id="timer">00:00</span><small id="stage">MÀN 1</small></div>
     <div class="score"><span>☠ <b id="kills">0</b></span><span>◆ <b id="gems">0</b></span></div>
   </div>
   <button id="pause" aria-label="Tạm dừng">Ⅱ</button>
+  <div id="enemyIntro" class="hidden" aria-live="polite"></div>
   <div class="xp"><i id="xpFill"></i><span id="level">Cấp 1</span></div>
+  <div id="eventBanner" class="hidden" aria-live="polite"></div>
   <div id="hint">WASD hoặc kéo để di chuyển</div>
+</div>
+
+<div id="attrSheet" class="hidden" aria-label="Bảng thuộc tính">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>Thuộc tính</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="points">Điểm: <b id="attrPoints">0</b></span>
+        <button id="attrClose" type="button">Đóng</button>
+      </div>
+    </div>
+    <p style="margin:0 0 4px;color:#6b6280;font-size:13px;font-weight:700;text-align:left">Trận đấu vẫn chạy khi bảng mở — cộng điểm nhanh rồi đóng lại. Lên cấp vẫn cho kỹ năng hoặc thêm điểm.</p>
+    <div id="attrRows"></div>
+  </div>
 </div>
 
 <div id="joystick" class="hidden"><div id="stick"></div></div>

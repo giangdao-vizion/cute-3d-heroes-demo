@@ -18,6 +18,8 @@ Thiết kế cho điện thoại dọc trước: camera nhìn dốc từ trên c
 
 Icon: render 3D có viền tối kiểu game mobile, cùng style với nhân vật (model CC0 KayKit/Quaternius + hình tự dựng), không dùng emoji. Bộ icon 2D miễn phí đã xem (Kenney UI, game-icons.net, các gói trên itch.io) đều phẳng hoặc pixel, không hợp; gói cartoon bóng kiểu Last War thì phải trả phí.
 
+Camera tự lùi theo ba mức khi số quái sắp vào vùng chiến đấu tăng cao, rồi tiến lại gần khi mật độ giảm. Các ngưỡng zoom vào/ra khác nhau để camera không dao động liên tục; boss luôn dùng ít nhất mức nhìn rộng trung bình.
+
 ## Vòng chơi
 
 - **Mỗi 1–3 giây:** né trái phải, nhắm hàng quái, bắn vỡ hòm.
@@ -33,14 +35,16 @@ Số máu chỉ hiện trên đầu quái sau phát trúng đầu tiên (giữ c
 
 ## Chỉ bắn trúng thứ đang thấy
 
-Quái, hòm, cổng phải đi vào vùng nhìn thấy (dưới thanh HUD phía trên) mới bị bắn trúng; đạn tắt khi tới mép đó. Mọi cú bắn trúng đều có tia sáng tại chỗ trúng. Đạn có lõi sáng, quầng sáng và vệt đuôi theo màu từng tướng.
+Quái, hòm, cổng phải đi vào vùng nhìn thấy (dưới thanh HUD phía trên) mới bị bắn trúng; đạn tắt khi tới mép đó. Mọi cú bắn trúng đều có tia sáng tại chỗ trúng. Đạn của tướng dùng model fireball emissive nhẹ; hiệu ứng va chạm vẫn giữ màu riêng của từng tướng.
 
 ## Các hệ thống
 
-- **Đạn theo tướng:** Hiệp sĩ chém sóng kiếm, Chiến binh ném rìu xoay, Pháp sư cầu tím, Sát thủ phi dao, Sát thủ trùm đầu bắn nỏ.
-- **Lính:** tối đa 30 (hiện 16 model, phần dư cộng vào sát thương). Quái chạm vạch đỏ giết lính trước, hết lính mới trừ máu cổng.
+- **Fireball dùng chung:** model GLB 56 tam giác, có lõi và đuôi cộng sáng, không dùng đèn động trên từng viên để giữ hiệu năng mobile.
+- **Đạn và hiệu ứng:** tối đa 5 tia tướng, 16 lính và 5 tia sét được render cùng lúc. Phần sức mạnh vượt ngưỡng được quy đổi thành sát thương để chỉ số tiếp tục tăng mà màn hình không bị phủ bởi projectile.
+- **Lính:** số lượng không hard-cap (hiện tối đa 16 model, phần dư cộng vào sát thương). Quái chạm vạch đỏ giết lính trước, hết lính mới trừ máu cổng.
 - **Hòm:** súng (+tia/+tốc/+sát thương/+xuyên), lính, máu cổng, bom, nộ.
 - **13 thẻ lên cấp** chia Thường / Hiếm / Sử thi: thêm tia, bắn nhanh, sát thương, xuyên thấu, chí mạng, đạn nổ, đạn băng, viện binh, huấn luyện lính, sét trời, thú cưng xung kích, sửa cổng, nộ khí.
+- **Soft cap:** nâng cấp trong ván luôn còn giá trị. Tốc bắn và số tia vượt giới hạn render chuyển thành sát thương; chí mạng vượt 100% thành siêu chí mạng; băng tiến dần tới 85% thay vì khóa cấp.
 - **Chiêu cuối:** mưa sao băng khi đầy nộ (Space).
 - **Thú cưng** (chó Shiba, cáo, husky): định kỳ lao lên cầu cắn quái.
 - **Combo:** hạ liên tục tăng hệ số điểm tới x5, một con lọt vạch là mất combo.

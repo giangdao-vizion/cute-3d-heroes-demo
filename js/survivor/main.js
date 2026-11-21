@@ -1,20 +1,31 @@
 import * as THREE from 'three';
 import { makeRenderer } from '../engine.js';
 import { SurvivorGame } from './survivor.js';
+import { bindLobbyLinks } from '../lobby-nav.js';
 
 const $ = id => document.getElementById(id);
 const renderer = makeRenderer($('c'));
 const ui = {
   hud:$('hud'),
+  enemyLabels:$('enemyLabels'),
   heroName:$('heroName'),
   hpFill:$('hpFill'),
   hpText:$('hpText'),
   timer:$('timer'),
+  stage:$('stage'),
   kills:$('kills'),
   gems:$('gems'),
   xpFill:$('xpFill'),
   level:$('level'),
   pause:$('pause'),
+  heroPanel:$('heroPanel'),
+  attrBadge:$('attrBadge'),
+  attrSheet:$('attrSheet'),
+  attrRows:$('attrRows'),
+  attrPointsLabel:$('attrPoints'),
+  attrClose:$('attrClose'),
+  enemyIntro:$('enemyIntro'),
+  eventBanner:$('eventBanner'),
   hint:$('hint'),
   joystick:$('joystick'),
   stick:$('stick'),
@@ -28,17 +39,34 @@ const ui = {
 
 const game = new SurvivorGame(renderer, ui);
 
+function viewportSize() {
+  const vv = window.visualViewport;
+  return {
+    width: Math.max(1, Math.round(vv?.width ?? innerWidth)),
+    height: Math.max(1, Math.round(vv?.height ?? innerHeight)),
+  };
+}
+
 function resize() {
-  const width = innerWidth;
-  const height = innerHeight;
+  const { width, height } = viewportSize();
+  const canvas = $('c');
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
   renderer.setSize(width, height, false);
   game.resize(width, height);
 }
 addEventListener('resize', resize);
+window.visualViewport?.addEventListener('resize', resize);
+window.visualViewport?.addEventListener('scroll', resize);
 resize();
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && game.state === 'playing') game.togglePause();
+  if (document.hidden) {
+    if (game.state === 'playing') game.togglePause();
+    clock.getDelta();
+    return;
+  }
+  game.needsRender = true;
 });
 document.addEventListener('contextmenu', event => event.preventDefault());
 document.addEventListener('dblclick', event => event.preventDefault(), { passive:false });
@@ -48,6 +76,7 @@ for (const name of ['gesturestart','gesturechange','gestureend']) {
 
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
+  if (document.hidden) return;
   game.update(clock.getDelta());
   game.render();
 });
@@ -58,6 +87,7 @@ try {
     ui.loadText.textContent = text;
   });
   ui.loading.classList.add('hidden');
+  requestAnimationFrame(() => game.showCurrentStageIntro());
 } catch (error) {
   console.error(error);
   ui.loading.innerHTML = `
@@ -67,6 +97,7 @@ try {
       <div class="actions"><button id="retry">Thử lại</button><a class="alt" href="index.html">Về sảnh</a></div>
     </div>`;
   ui.loading.querySelector('#retry').onclick = () => location.reload();
+  bindLobbyLinks(ui.loading);
 }
 
 window.__survivor = game;

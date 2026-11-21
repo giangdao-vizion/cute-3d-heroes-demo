@@ -32,7 +32,9 @@ export async function spawnModel(entry, heightOverride) {
   }
   model.traverse(o => {
     if (o.isMesh) {
-      o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false;
+      o.castShadow = true; o.receiveShadow = false;
+      // Skinned bounds are unreliable while animating — culling them causes pop/jitter.
+      o.frustumCulled = !o.isSkinnedMesh;
       // Quaternius để metalness 0.4 nên model bị tối: chuyển về chất liệu mờ kiểu toon.
       for (const m of [].concat(o.material)) { if (m.metalness !== undefined) { m.metalness = 0; m.roughness = Math.max(m.roughness, 0.75); } }
     }
@@ -49,6 +51,12 @@ export async function spawnModel(entry, heightOverride) {
       if (o.isMesh && o.visible) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); }
     });
   }
+  // Bind-pose bounds so frustum culling stays correct without disabling it.
+  model.traverse(o => {
+    if (!o.isSkinnedMesh) return;
+    o.geometry.computeBoundingSphere();
+    o.geometry.computeBoundingBox();
+  });
   const h = Math.max(box.max.y - box.min.y, 1e-4);
   const s = (heightOverride || entry.height) / h;
   model.scale.multiplyScalar(s);
@@ -92,11 +100,31 @@ export class Animator {
   update(dt) { this.mixer.update(dt); }
 }
 
+/** Mobile / coarse-pointer devices heat up fast with soft shadows + 2× DPR. */
+export function isMobileGraphics() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+  try {
+    if (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 920) return true;
+  } catch (_) { /* ignore */ }
+  return false;
+}
+
 export function makeRenderer(canvas) {
-  const r = new THREE.WebGLRenderer({ canvas, antialias: true });
-  r.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const mobile = isMobileGraphics();
+  const r = new THREE.WebGLRenderer({
+    canvas,
+    // Keep MSAA on phones — turning it off made silhouettes visibly jagged.
+    antialias: true,
+    // Prefer default over low-power: low-power can stutter under animation load.
+    powerPreference: mobile ? 'default' : 'high-performance',
+    alpha: false,
+  });
+  // Soft cap only: 1.25 was too soft and looked stair-steppy while moving.
+  r.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1.75 : 2));
   r.shadowMap.enabled = true;
-  r.shadowMap.type = THREE.PCFSoftShadowMap;
+  r.shadowMap.type = mobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   r.outputColorSpace = THREE.SRGBColorSpace;
   r.toneMapping = THREE.ACESFilmicToneMapping;
   r.toneMappingExposure = 1.05;
@@ -104,11 +132,13 @@ export function makeRenderer(canvas) {
 }
 
 export function addLights(scene, size = 30) {
+  const mobile = isMobileGraphics();
   scene.add(new THREE.HemisphereLight(0xdff3ff, 0x6b8f4e, 1.4));
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
   sun.position.set(12, 22, 10);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  const map = mobile ? 1536 : 2048;
+  sun.shadow.mapSize.set(map, map);
   Object.assign(sun.shadow.camera, { left: -size, right: size, top: size, bottom: -size, near: 1, far: 80 });
   sun.shadow.bias = -0.0005;
   scene.add(sun); scene.add(sun.target);
@@ -117,6 +147,7 @@ export function addLights(scene, size = 30) {
 
 // Cây, đá, hoa low-poly để trang trí (tự sinh, không cần file).
 export function makeTree(scale = 1) {
+  const mobile = isMobileGraphics();
   const g = new THREE.Group();
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.8, 6), new THREE.MeshStandardMaterial({ color: 0x8a5a3b, flatShading: true }));
   trunk.position.y = 0.4; g.add(trunk);
@@ -125,23 +156,29 @@ export function makeTree(scale = 1) {
     const c = new THREE.Mesh(new THREE.ConeGeometry(0.75 - i * 0.18, 0.9, 7), new THREE.MeshStandardMaterial({ color: greens[i], flatShading: true }));
     c.position.y = 1.0 + i * 0.45; g.add(c);
   }
-  g.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+  // Decor props casting soft shadows are expensive; keep characters as the casters.
+  g.traverse(o => { if (o.isMesh) { o.castShadow = !mobile; o.frustumCulled = true; } });
   g.scale.setScalar(scale);
   return g;
 }
 
 export function makeRock(scale = 1) {
+  const mobile = isMobileGraphics();
   const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4, 0), new THREE.MeshStandardMaterial({ color: 0x9aa3ad, flatShading: true }));
-  m.scale.set(scale, scale * 0.7, scale); m.position.y = 0.15 * scale; m.castShadow = true; m.receiveShadow = true;
+  m.scale.set(scale, scale * 0.7, scale); m.position.y = 0.15 * scale;
+  m.castShadow = !mobile; m.receiveShadow = true; m.frustumCulled = true;
   return m;
 }
 
 export function makeFlower() {
+  const mobile = isMobileGraphics();
   const g = new THREE.Group();
   const colors = [0xff8fb1, 0xffd166, 0xffffff, 0xb28dff];
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), new THREE.MeshStandardMaterial({ color: colors[Math.floor(Math.random() * 4)] }));
+  const Mat = mobile ? THREE.MeshBasicMaterial : THREE.MeshStandardMaterial;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, mobile ? 5 : 6, mobile ? 3 : 4), new Mat({ color: colors[Math.floor(Math.random() * 4)] }));
   head.position.y = 0.18; g.add(head);
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.18, 3), new THREE.MeshStandardMaterial({ color: 0x3f8f3a }));
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.18, 3), new Mat({ color: 0x3f8f3a }));
   stem.position.y = 0.09; g.add(stem);
+  g.traverse(o => { if (o.isMesh) o.frustumCulled = true; });
   return g;
 }

@@ -3,7 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Cute 3D Heroes – demo chọn nhân vật</title>
+<title>Cute Heroes – Chọn cuộc phiêu lưu</title>
+<meta name="theme-color" content="#2b2340">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cute Heroes">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="mask-icon" href="safari-pinned-tab.svg" color="#2b2340">
+<link rel="manifest" href="site.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -12,8 +23,73 @@
   /* Game: không zoom khi chạm hai lần, không chọn chữ. */
   html, body, button, a, #hud, #dhud, #dmodal, #panel { touch-action:manipulation; }
   img { -webkit-user-drag:none; user-drag:none; }
-  html, body { margin:0; height:100%; overflow:hidden; font-family:'Baloo 2', system-ui, sans-serif; color:var(--ink); background:#bfe6ff; }
-  canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  html { height:100%; height:100dvh; }
+  html, body { margin:0; width:100%; min-height:100%; min-height:100dvh; min-height:-webkit-fill-available; overflow:hidden; font-family:'Baloo 2', system-ui, sans-serif; color:var(--ink); background:#fff0c7; }
+  body { position:fixed; inset:0; width:100%; height:100%; height:var(--app-height, 100dvh); }
+  canvas#c { position:fixed; inset:0; width:100%; width:100dvw; height:100%; height:var(--app-height, 100dvh); display:block; touch-action:none; }
+  /* ---- Trang chủ: nhẹ, không dùng canvas hay model 3D ---- */
+  #home { position:fixed; inset:0; z-index:20; width:100%; height:100%; height:var(--app-height, 100dvh); min-height:-webkit-fill-available; overflow:auto; -webkit-overflow-scrolling:touch; padding:calc(18px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom)); background:
+    radial-gradient(circle at 14% 8%,rgba(255,255,255,.9) 0 5%,transparent 5.5%),
+    radial-gradient(circle at 88% 18%,rgba(255,255,255,.6) 0 8%,transparent 8.5%),
+    linear-gradient(165deg,#c9efff 0%,#dff7e1 54%,#fff0c7 100%); }
+  #home::before, #home::after { content:''; position:fixed; z-index:-1; border-radius:50%; filter:blur(1px); }
+  #home::before { width:190px; height:190px; right:-70px; bottom:12%; background:rgba(255,122,89,.14); }
+  #home::after { width:150px; height:150px; left:-65px; top:38%; background:rgba(79,157,255,.14); }
+  .home-shell { width:min(760px,100%); min-height:100%; margin:0 auto; display:flex; flex-direction:column; }
+  .home-brand { display:flex; align-items:center; gap:11px; margin-bottom:14px; }
+  .home-logo { width:48px; height:48px; display:grid; place-items:center; flex:0 0 auto; border:3px solid rgba(255,255,255,.9); border-radius:16px; background:linear-gradient(145deg,#ffad72,#ff6f61); box-shadow:0 7px 0 rgba(179,78,61,.18); font-size:28px; transform:rotate(-4deg); }
+  .home-brand h1 { margin:0; font-size:clamp(24px,8vw,36px); line-height:.9; letter-spacing:-.03em; }
+  .home-brand p { margin:4px 0 0; color:#665b76; font-size:13px; font-weight:700; }
+  .home-card { padding:15px; border:2px solid rgba(255,255,255,.82); border-radius:24px; background:rgba(255,250,242,.82); box-shadow:0 16px 40px rgba(43,35,64,.12); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); }
+  .home-card + .home-card { margin-top:12px; }
+  .section-title { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  .section-title h2 { margin:0; font-size:19px; line-height:1; }
+  .section-title span { color:#746985; font-size:11px; font-weight:700; }
+  .selected-hero { width:100%; min-height:116px; display:grid; grid-template-columns:76px minmax(0,1fr) 30px; align-items:center; gap:12px; padding:12px; border:2px solid #eee3d3; border-radius:20px; background:#fff; color:var(--ink); font:inherit; text-align:left; cursor:pointer; box-shadow:0 5px 0 #e7dccd; }
+  .selected-avatar { width:76px; height:76px; display:grid; place-items:center; border-radius:22px; background:linear-gradient(145deg,#eaf6ff,#dbeafe); font-size:42px; }
+  .selected-copy { min-width:0; }
+  .selected-copy small { display:block; color:#ff6b4a; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+  .selected-copy b { display:block; margin:1px 0 5px; overflow:hidden; font-size:21px; line-height:1.05; text-overflow:ellipsis; white-space:nowrap; }
+  .hero-stats { display:flex; flex-wrap:wrap; gap:4px; }
+  .hero-stats span { padding:2px 7px; border-radius:99px; background:#f3edff; color:#615476; font-size:10px; font-weight:800; white-space:nowrap; }
+  .selected-arrow { width:28px; height:28px; display:grid; place-items:center; border-radius:50%; background:#2b2340; color:#fff; font-size:18px; }
+  .selected-hero:active { transform:translateY(3px); box-shadow:0 2px 0 #e7dccd; }
+  .hero-sheet { position:fixed; inset:0; z-index:40; display:flex; align-items:flex-end; justify-content:center; }
+  .sheet-backdrop { position:absolute; inset:0; border:0; background:rgba(31,25,48,.56); }
+  .hero-sheet-card { position:relative; width:min(620px,100%); max-height:min(88dvh,760px); overflow:auto; padding:10px 16px calc(18px + env(safe-area-inset-bottom)); border-radius:28px 28px 0 0; background:#fffaf2; box-shadow:0 -18px 55px rgba(31,25,48,.28); animation:sheetUp .25s ease-out; }
+  .sheet-grab { width:42px; height:5px; margin:0 auto 13px; border-radius:99px; background:#d9cfbf; }
+  .sheet-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+  .sheet-head h2 { margin:0; font-size:25px; line-height:1; }
+  .sheet-head p { margin:3px 0 0; color:#756a82; font-size:12px; font-weight:700; }
+  .sheet-close { width:40px; height:40px; flex:0 0 auto; border:0; border-radius:50%; background:#eee5d8; color:var(--ink); font:800 20px 'Baloo 2',system-ui; cursor:pointer; }
+  .hero-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+  .hero-option { position:relative; min-width:0; min-height:130px; padding:12px 9px 10px; border:2px solid #e9dece; border-radius:19px; background:#fff; color:var(--ink); font:inherit; text-align:left; cursor:pointer; box-shadow:0 4px 0 #e9dece; }
+  .hero-option .avatar { display:grid; place-items:center; width:48px; height:48px; margin-bottom:7px; border-radius:15px; background:linear-gradient(145deg,#eef7ff,#e2e8ff); font-size:29px; }
+  .hero-option b, .hero-option small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hero-option b { font-size:15px; line-height:1.05; }
+  .hero-option small { margin:3px 0 5px; color:#80748d; font-size:10px; font-weight:700; }
+  .hero-option .quick-stat { display:flex; gap:4px; }
+  .hero-option .quick-stat i { padding:1px 5px; border-radius:99px; background:#f5efff; color:#6b5b80; font-size:9px; font-style:normal; font-weight:800; }
+  .hero-option.on { border-color:#ff7a59; background:#fff7f2; box-shadow:0 4px 0 #ffb19d; }
+  .hero-option.on::after { content:'✓'; position:absolute; top:8px; right:8px; width:23px; height:23px; display:grid; place-items:center; border-radius:50%; background:#ff7a59; color:#fff; font-size:13px; font-weight:800; }
+  .sheet-done { width:100%; min-height:52px; margin-top:13px; border:0; border-radius:17px; background:#2b2340; color:#fff; font:800 17px 'Baloo 2',system-ui; cursor:pointer; }
+  @keyframes sheetUp { from { transform:translateY(100%); } to { transform:none; } }
+  .mode-picker { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+  .mode-pick { min-width:0; min-height:100px; padding:12px; border:2px solid transparent; border-radius:19px; color:#fff; font:inherit; text-align:left; cursor:pointer; box-shadow:inset 0 1px rgba(255,255,255,.25),0 5px 0 rgba(43,35,64,.13); }
+  .mode-pick:nth-child(1) { background:linear-gradient(145deg,#ff996f,#f35f67); }
+  .mode-pick:nth-child(2) { background:linear-gradient(145deg,#4fa8ff,#3569d8); }
+  .mode-pick:nth-child(3) { background:linear-gradient(145deg,#a879f7,#7043ce); }
+  .mode-pick:last-child { grid-column:1 / -1; min-height:84px; }
+  .mode-pick .mode-icon { display:block; margin-bottom:5px; font-size:29px; line-height:1; }
+  .mode-pick b, .mode-pick small { display:block; }
+  .mode-pick b { font-size:16px; line-height:1.05; }
+  .mode-pick small { margin-top:3px; opacity:.88; font-size:10px; line-height:1.15; font-weight:700; }
+  .mode-pick.on { border-color:#fff; outline:3px solid rgba(43,35,64,.18); transform:translateY(-2px); }
+  .home-actions { margin-top:auto; padding-top:14px; }
+  #startAdventure { width:100%; min-height:58px; border:0; border-radius:19px; background:#2b2340; color:#fff; font:800 19px 'Baloo 2',system-ui; cursor:pointer; box-shadow:0 7px 0 #151020; }
+  #startAdventure:active { transform:translateY(4px); box-shadow:0 3px 0 #151020; }
+  .light-note { display:flex; align-items:center; justify-content:center; gap:5px; margin-top:12px; color:#625775; font-size:11px; font-weight:700; }
+  .light-note i { width:7px; height:7px; border-radius:50%; background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,.14); }
   #labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
   .label { position:absolute; left:0; top:0; padding:1px 9px; border-radius:99px; background:rgba(255,255,255,.85); font-size:13px; font-weight:700; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.12); }
   .label.sel { background:var(--accent); color:#fff; }
@@ -23,7 +99,8 @@
   .hpbar.boss { width:120px; height:12px; } .hpbar.boss i { background:linear-gradient(90deg,#f97316,#dc2626); }
   .dmg { position:absolute; left:0; top:0; font-weight:800; font-size:20px; text-shadow:0 2px 0 rgba(0,0,0,.5), 0 0 4px rgba(0,0,0,.4); white-space:nowrap; }
 
-  header { position:fixed; top:14px; left:50%; transform:translateX(-50%); display:flex; gap:6px; background:rgba(255,255,255,.9); padding:5px; border-radius:99px; box-shadow:0 6px 20px rgba(0,0,0,.12); z-index:5; }
+  header { position:fixed; top:calc(8px + env(safe-area-inset-top)); left:50%; width:max-content; max-width:calc(100% - 16px); transform:translateX(-50%); display:flex; gap:4px; overflow-x:auto; background:rgba(255,255,255,.9); padding:5px; border-radius:99px; box-shadow:0 6px 20px rgba(0,0,0,.12); z-index:5; scrollbar-width:none; }
+  header::-webkit-scrollbar { display:none; }
   header button { border:0; padding:8px 20px; border-radius:99px; font:inherit; font-weight:800; font-size:16px; background:transparent; color:var(--ink); cursor:pointer; }
   header button.on { background:var(--accent); color:#fff; }
 
@@ -183,9 +260,29 @@
   .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin:12px 0 0; }
   .stats div { background:#fff; border-radius:12px; padding:4px; font-size:18px; } .stats b { display:block; font-size:20px; }
   .hidden { display:none !important; }
+  /* Sinh tồn trong iframe: giữ Home Screen standalone, không nhảy sang Safari. */
+  #survivorFrame { position:fixed; inset:0; width:100%; width:100dvw; height:100%; height:var(--app-height, 100dvh); border:0; z-index:80; background:#9fd8ff; }
   @media (max-width: 560px) { header button { padding:5px 7px; font-size:12px; white-space:nowrap; } header { top:8px; gap:3px; } }
   @media (max-width: 760px) { #panel { top:auto; height:42%; left:8px; right:8px; width:auto; } }
+  @media (min-width:700px) {
+    .home-main { display:grid; grid-template-columns:.9fr 1.1fr; gap:12px; }
+    .home-card + .home-card { margin-top:0; }
+    .hero-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  }
 </style>
+<script>
+  // iOS Home Screen / Safari: 100% often leaves a blue strip under the fixed home shell.
+  (function syncAppHeight() {
+    const apply = () => {
+      const height = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
+      document.documentElement.style.setProperty('--app-height', height + 'px');
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    window.visualViewport?.addEventListener('resize', apply);
+    window.visualViewport?.addEventListener('scroll', apply);
+  })();
+</script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -194,12 +291,62 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<main id="home">
+  <div class="home-shell">
+    <div class="home-brand">
+      <div class="home-logo">⚔️</div>
+      <div><h1>Cute Heroes</h1><p>Chọn đội hình · Bắt đầu phiêu lưu</p></div>
+    </div>
+    <div class="home-main">
+      <section class="home-card" aria-labelledby="heroTitle">
+        <div class="section-title"><h2 id="heroTitle">1. Nhân vật</h2><span>Chạm để thay đổi</span></div>
+        <button id="openHeroPicker" class="selected-hero">
+          <span class="selected-avatar" id="selectedHeroAvatar">🛡️</span>
+          <span class="selected-copy"><small>Đang chọn</small><b id="selectedHeroName">Hiệp sĩ</b><span class="hero-stats" id="selectedHeroStats"></span></span>
+          <span class="selected-arrow">›</span>
+        </button>
+      </section>
+      <section class="home-card" aria-labelledby="modeTitle">
+        <div class="section-title"><h2 id="modeTitle">2. Chọn chế độ</h2><span>3 cách chơi</span></div>
+        <div class="mode-picker">
+          <button class="mode-pick" data-mode="game"><span class="mode-icon">⚔️</span><b>Đấu trường</b><small>Đánh quái theo từng đợt</small></button>
+          <button class="mode-pick on" data-mode="defense"><span class="mode-icon">🏰</span><b>Giữ cổng</b><small>Phòng thủ cây cầu vô tận</small></button>
+          <button class="mode-pick" data-mode="survivor"><span class="mode-icon">💫</span><b>Sinh tồn</b><small>Di chuyển, lên cấp, nâng cấp</small></button>
+        </div>
+      </section>
+    </div>
+    <div class="home-actions">
+      <button id="startAdventure">Chơi Giữ cổng <span aria-hidden="true">→</span></button>
+      <div class="light-note"><i></i> Model 3D chỉ tải sau khi bạn bắt đầu</div>
+    </div>
+  </div>
+</main>
+
+<div id="heroSheet" class="hero-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="heroSheetTitle">
+  <button class="sheet-backdrop" data-close-heroes aria-label="Đóng danh sách nhân vật"></button>
+  <div class="hero-sheet-card">
+    <div class="sheet-grab"></div>
+    <div class="sheet-head">
+      <div><h2 id="heroSheetTitle">Chọn nhân vật</h2><p>Chọn lối chơi phù hợp với bạn</p></div>
+      <button class="sheet-close" data-close-heroes aria-label="Đóng">×</button>
+    </div>
+    <div class="hero-grid">
+      <button class="hero-option" data-hero="Knight"><span class="avatar">🛡️</span><b>Hiệp sĩ</b><small>Cân bằng · Dễ chơi</small><span class="quick-stat"><i>HP cao</i><i>Cận chiến</i></span></button>
+      <button class="hero-option" data-hero="Barbarian"><span class="avatar">🪓</span><b>Chiến binh</b><small>Mạnh mẽ · Bền bỉ</small><span class="quick-stat"><i>Sát thương</i><i>Cận chiến</i></span></button>
+      <button class="hero-option" data-hero="Mage"><span class="avatar">🔮</span><b>Pháp sư</b><small>Phép thuật · Tầm xa</small><span class="quick-stat"><i>Đánh xa</i><i>HP thấp</i></span></button>
+      <button class="hero-option" data-hero="Rogue"><span class="avatar">🗡️</span><b>Sát thủ</b><small>Nhanh nhẹn · Liên hoàn</small><span class="quick-stat"><i>Rất nhanh</i><i>Cận chiến</i></span></button>
+      <button class="hero-option" data-hero="Rogue_Hooded"><span class="avatar">🏹</span><b>Xạ thủ</b><small>Linh hoạt · Chính xác</small><span class="quick-stat"><i>Đánh xa</i><i>Tốc độ</i></span></button>
+    </div>
+    <button class="sheet-done" data-close-heroes>Xong</button>
+  </div>
+</div>
+
+<canvas id="c" class="hidden"></canvas>
 <div id="labels"></div>
 
-<header>
-  <button id="tabGallery" class="on">🧸 Showroom</button>
-  <button id="tabGame">⚔️ Chơi thử</button>
+<header class="hidden">
+  <button id="tabHome">⌂ Nhà</button>
+  <button id="tabGame">⚔️ Đấu trường</button>
   <button id="tabDefense">🛡️ Giữ cổng</button>
   <button id="tabSurvivor">💫 Sinh tồn</button>
 </header>
@@ -242,8 +389,8 @@
 <div id="dmodal" class="hidden"></div>
 <div id="toast"></div>
 <div id="overlay" class="hidden"><div class="box"><div id="overlayText"></div>
-  <button id="again">Chơi lại</button><button class="alt" id="back">Về showroom</button></div></div>
-<div id="loading">Đang tải nhân vật…<div class="bar"><i id="loadBar"></i></div><div id="loadText" style="font-size:15px;margin-top:6px"></div></div>
+  <button id="again">Chơi lại</button><button class="alt" id="back">Về trang chủ</button></div></div>
+<div id="loading" class="hidden">Đang chuẩn bị cuộc phiêu lưu…<div class="bar"><i id="loadBar"></i></div><div id="loadText" style="font-size:15px;margin-top:6px"></div></div>
 
 <script type="module" src="js/main.js"></script>
 </body>

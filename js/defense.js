@@ -2,7 +2,7 @@
 // Bắn hòm để nhận quà, chọn cổng toán học (+lính, +% tốc bắn...), lên cấp chọn 1 trong 3 thẻ.
 import * as THREE from 'three';
 import { byId, CATALOG } from './catalog.js';
-import { spawnModel, loadModel, Animator, addLights, makeTree, makeRock } from './engine.js';
+import { spawnModel, loadModel, Animator, addLights, makeTree, makeRock, isMobileGraphics } from './engine.js';
 import { selection } from './state.js';
 
 const HALF = 4.5;          // nửa bề rộng cầu
@@ -11,7 +11,13 @@ const LEAK_Z = 1.8;        // vạch đích: quái chạm vạch này là trừ 
 const WALL_Z = 4.4;
 const WAVE_DUR = 150;      // mỗi level 2:30 quân thường, hết giờ thì boss ra; hạ boss xong sang level mới (~3 phút/level)
 const MAX_ALIVE = 90;
+const MAX_VISIBLE_SHOTS = 5;     // sức mạnh có thể tăng vô hạn, nhưng không sinh vô hạn mesh đạn
+const MAX_VISIBLE_SOLDIERS = 16;
+const MAX_VISIBLE_LIGHTNING = 5;
 const META_KEY = 'cute3d.defense.meta.v1';
+const FIREBALL_ENTRY = { id: 'ember_projectile', file: 'models/props/ember_projectile.glb', height: 0.78 };
+const FIREBALL_FORWARD = new THREE.Vector3(0, 0, -1);
+const FIREBALL_UP = new THREE.Vector3(0, 1, 0);
 
 // Quái mở dần theo đợt. hp/spd là hệ số so với quái chuẩn.
 const ROSTER = [
@@ -35,35 +41,37 @@ const BULLET_STYLE = {
 };
 
 const CARDS = [
-  { id: 'multi', fx: '+1', icon: 'arrows', name: 'Thêm tia đạn', desc: '+1 tia bắn song song', rar: 'epic', need: P => P.multi < 5, apply: P => P.multi = Math.min(5, P.multi + 1) },
+  { id: 'multi', fx: '+1', icon: 'arrows', name: 'Thêm tia đạn', desc: '+1 sức mạnh loạt bắn (tối đa 5 tia hiển thị)', rar: 'epic', apply: P => P.multi++ },
   { id: 'rate', fx: '+20%', icon: 'chevron', name: 'Bắn nhanh', desc: '+20% tốc độ bắn', rar: 'common', apply: P => P.ratePct += 20 },
   { id: 'dmg', fx: '+1', icon: 'sword', name: 'Sát thương', desc: 'Mỗi viên đạn +1 sát thương', rar: 'rare', apply: P => P.dmgAdd++ },
-  { id: 'pierce', fx: '+1', icon: 'target', name: 'Xuyên thấu', desc: 'Mỗi viên đạn xuyên thêm 1 quái', rar: 'rare', max: 4, apply: P => P.pierce++ },
-  { id: 'crit', fx: '+12%', icon: 'burst', name: 'Chí mạng', desc: '+12% tỉ lệ chí mạng (sát thương x2)', rar: 'common', max: 5, apply: P => P.crit += 0.12 },
-  { id: 'splash', fx: '+1', icon: 'bomb', name: 'Đạn nổ', desc: 'Trúng đích nổ lan, gây 50% sát thương xung quanh', rar: 'epic', max: 4, apply: P => P.splash = P.splash ? P.splash + 0.6 : 1.5 },
-  { id: 'slow', fx: '-35%', icon: 'snow', name: 'Đạn băng', desc: 'Quái trúng đạn chậm đi 35%', rar: 'rare', max: 1, apply: P => P.slow = 0.35 },
+  { id: 'pierce', fx: '+1', icon: 'target', name: 'Xuyên thấu', desc: 'Mỗi viên đạn xuyên thêm 1 quái', rar: 'rare', apply: P => P.pierce++ },
+  { id: 'crit', fx: '+12%', icon: 'burst', name: 'Chí mạng', desc: '+12% chí mạng; vượt 100% tạo siêu chí mạng', rar: 'common', apply: P => P.crit += 0.12 },
+  { id: 'splash', fx: '+1', icon: 'bomb', name: 'Đạn nổ', desc: 'Tăng bán kính nổ lan, gây 50% sát thương xung quanh', rar: 'epic', apply: P => P.splash = P.splash ? P.splash + 0.6 : 1.5 },
+  { id: 'slow', fx: '+', icon: 'snow', name: 'Đạn băng', desc: 'Tăng hiệu quả làm chậm, giảm dần khi gần 85%', rar: 'rare', apply: P => P.slow += (0.85 - P.slow) * 0.35 },
   { id: 'squad', fx: '+3', icon: 'soldier', name: 'Viện binh', desc: '+3 lính đứng bắn cùng bạn', rar: 'common', apply: (P, g) => g.addSoldiers(3) },
-  { id: 'sdmg', fx: '+1', icon: 'swordshield', name: 'Huấn luyện lính', desc: 'Đạn của lính +1 sát thương', rar: 'rare', max: 5, need: P => P.soldiers > 0, apply: P => P.soldierPow++ },
-  { id: 'bolt', fx: '+1', icon: 'boltBlue', name: 'Sét trời', desc: 'Mỗi 2.5 giây sét đánh thêm 1 quái', rar: 'epic', max: 5, apply: P => P.lightning++ },
-  { id: 'pet', fx: '+1', icon: 'pet', name: 'Thú cưng', desc: 'Thú cưng lao lên cắn quái nhanh và mạnh hơn', rar: 'rare', max: 5, need: (P, g) => !!g.pet, apply: P => P.petLv++ },
+  { id: 'sdmg', fx: '+1', icon: 'swordshield', name: 'Huấn luyện lính', desc: 'Đạn của lính +1 sát thương', rar: 'rare', need: P => P.soldiers > 0, apply: P => P.soldierPow++ },
+  { id: 'bolt', fx: '+1', icon: 'boltBlue', name: 'Sét trời', desc: 'Sét đánh thêm mục tiêu hoặc tăng sát thương', rar: 'epic', apply: P => P.lightning++ },
+  { id: 'pet', fx: '+1', icon: 'pet', name: 'Thú cưng', desc: 'Thú cưng lao lên cắn quái nhanh và mạnh hơn', rar: 'rare', need: (P, g) => !!g.pet, apply: P => P.petLv++ },
   { id: 'wall', fx: '+4', icon: 'tower', name: 'Sửa cổng', desc: '+4 máu cổng tối đa, hồi đầy cổng', rar: 'common', apply: (P, g) => { g.gateMax += 4; g.gateHp = g.gateMax; } },
-  { id: 'ult', fx: '+40%', icon: 'star', name: 'Nộ khí', desc: 'Chiêu cuối nạp nhanh hơn 40%', rar: 'rare', max: 3, apply: P => P.ultGain *= 1.4 },
+  { id: 'ult', fx: '+40%', icon: 'star', name: 'Nộ khí', desc: 'Chiêu cuối nạp nhanh hơn 40%', rar: 'rare', apply: P => P.ultGain *= 1.4 },
 ];
-// Chỉ số có thể mua bằng vàng trong ván. cur/max để người chơi thấy còn nâng được bao nhiêu.
+// Nâng cấp trong ván không hard-cap: giới hạn hiển thị được đổi thành sức mạnh số học.
 const SPLASH_LV = P => P.splash ? Math.round((P.splash - 1.5) / 0.6) + 1 : 0;
+const NO_CAP = () => '∞';
+const CAN_UPGRADE = () => true;
 const UPG = [
-  { id: 'dmg', icon: 'sword', name: 'Sát thương', cost: 14, cur: P => P.dmg, max: () => 30, can: P => P.dmg < 30, buy: P => P.dmgAdd++ },
-  { id: 'rate', icon: 'chevron', name: 'Tốc bắn', cost: 10, cur: P => P.rate.toFixed(1), max: () => 11, can: P => P.rate < 11, buy: P => P.ratePct += 15 },
-  { id: 'multi', icon: 'arrows', name: 'Tia đạn', cost: 30, cur: P => P.multi, max: () => 5, can: P => P.multi < 5, buy: P => P.multi++ },
-  { id: 'pierce', icon: 'target', name: 'Xuyên thấu', cost: 22, cur: P => P.pierce, max: () => 4, can: P => P.pierce < 4, buy: P => P.pierce++ },
-  { id: 'crit', icon: 'burst', name: 'Chí mạng', cost: 12, cur: P => Math.round(P.crit * 100) + '%', max: () => '65%', can: P => P.crit < 0.645, buy: P => P.crit = Math.min(0.65, P.crit + 0.1) },
-  { id: 'squad', icon: 'soldier', name: 'Lính', cost: 10, cur: P => P.soldiers, max: () => 30, can: P => P.soldiers < 30, buy: (P, g) => g.addSoldiers(2) },
-  { id: 'sdmg', icon: 'swordshield', name: 'Sức lính', cost: 16, cur: P => P.soldierPow, max: () => 10, can: P => P.soldierPow < 10, buy: P => P.soldierPow++ },
-  { id: 'pet', icon: 'pet', name: 'Thú cưng', cost: 15, need: (P, g) => !!g.pet, cur: P => P.petLv, max: () => 6, can: P => P.petLv < 6, buy: P => P.petLv++ },
-  { id: 'bolt', icon: 'boltBlue', name: 'Sét', cost: 20, cur: P => P.lightning, max: () => 5, can: P => P.lightning < 5, buy: P => P.lightning++ },
-  { id: 'splash', icon: 'bomb', name: 'Nổ lan', cost: 24, cur: P => SPLASH_LV(P), max: () => 4, can: P => SPLASH_LV(P) < 4, buy: P => P.splash = P.splash ? P.splash + 0.6 : 1.5 },
-  { id: 'slow', icon: 'snow', name: 'Băng', cost: 20, cur: P => P.slow ? 1 : 0, max: () => 1, can: P => !P.slow, buy: P => P.slow = 0.35 },
-  { id: 'wall', icon: 'tower', name: 'Cổng', cost: 10, cur: (P, g) => g.gateMax, max: () => 80, can: (P, g) => g.gateMax < 80, buy: (P, g) => { g.gateMax += 4; g.gateHp = g.gateMax; } },
+  { id: 'dmg', icon: 'sword', name: 'Sát thương', cost: 14, cur: P => P.dmg, max: NO_CAP, can: CAN_UPGRADE, buy: P => P.dmgAdd++ },
+  { id: 'rate', icon: 'chevron', name: 'Tốc bắn', cost: 10, cur: P => P.rawRate.toFixed(1), max: NO_CAP, can: CAN_UPGRADE, buy: P => P.ratePct += 15 },
+  { id: 'multi', icon: 'arrows', name: 'Sức loạt bắn', cost: 30, cur: P => P.multi, max: NO_CAP, can: CAN_UPGRADE, buy: P => P.multi++ },
+  { id: 'pierce', icon: 'target', name: 'Xuyên thấu', cost: 22, cur: P => P.pierce, max: NO_CAP, can: CAN_UPGRADE, buy: P => P.pierce++ },
+  { id: 'crit', icon: 'burst', name: 'Chí mạng', cost: 12, cur: P => Math.round(P.crit * 100) + '%', max: NO_CAP, can: CAN_UPGRADE, buy: P => P.crit += 0.1 },
+  { id: 'squad', icon: 'soldier', name: 'Lính', cost: 10, cur: P => P.soldiers, max: NO_CAP, can: CAN_UPGRADE, buy: (P, g) => g.addSoldiers(2) },
+  { id: 'sdmg', icon: 'swordshield', name: 'Sức lính', cost: 16, cur: P => P.soldierPow, max: NO_CAP, can: CAN_UPGRADE, buy: P => P.soldierPow++ },
+  { id: 'pet', icon: 'pet', name: 'Thú cưng', cost: 15, need: (P, g) => !!g.pet, cur: P => P.petLv, max: NO_CAP, can: CAN_UPGRADE, buy: P => P.petLv++ },
+  { id: 'bolt', icon: 'boltBlue', name: 'Sét', cost: 20, cur: P => P.lightning, max: NO_CAP, can: CAN_UPGRADE, buy: P => P.lightning++ },
+  { id: 'splash', icon: 'bomb', name: 'Nổ lan', cost: 24, cur: P => SPLASH_LV(P), max: NO_CAP, can: CAN_UPGRADE, buy: P => P.splash = P.splash ? P.splash + 0.6 : 1.5 },
+  { id: 'slow', icon: 'snow', name: 'Băng', cost: 20, cur: P => Math.round(P.slow * 100) + '%', max: NO_CAP, can: CAN_UPGRADE, buy: P => P.slow += (0.85 - P.slow) * 0.35 },
+  { id: 'wall', icon: 'tower', name: 'Cổng', cost: 10, cur: (P, g) => g.gateMax, max: NO_CAP, can: CAN_UPGRADE, buy: (P, g) => { g.gateMax += 4; g.gateHp = g.gateMax; } },
 ];
 const UPG_BY = Object.fromEntries(UPG.map(u => [u.id, u]));
 const RAR = { common: { w: 10, label: 'Thường' }, rare: { w: 6, label: 'Hiếm' }, epic: { w: 3, label: 'Sử thi' } };
@@ -209,18 +217,20 @@ export class Defense {
     this.layer.innerHTML = '';
     const scene = this.scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9fd8ff);
-    scene.fog = new THREE.Fog(0x9fd8ff, 40, 90);
+    scene.fog = isMobileGraphics() ? null : new THREE.Fog(0x9fd8ff, 40, 90);
     this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
     this.sun = addLights(scene, 30);
     this.sun.position.set(10, 26, 6); this.sun.target.position.set(0, 0, -18);
     this.buildWorld();
+    this.cameraZoom = 1; this.cameraDensityTier = 1;
     this.fitCamera();
 
     const lv = this.meta.lv;
     this.P = {
       dmgAdd: lv.dmg || 0, ratePct: 0, multi: 1,
       get dmg() { return 1 + this.dmgAdd; },   // sát thương mỗi viên luôn là số nguyên
-      get rate() { return Math.min(11, 3.2 * (1 + this.ratePct / 100)); }, pierce: 0, crit: 0.05, splash: 0, slow: 0,
+      get rawRate() { return 3.2 * (1 + this.ratePct / 100); },
+      get rate() { return Math.min(11, this.rawRate); }, pierce: 0, crit: 0.05, splash: 0, slow: 0,
       soldiers: 0, soldierPow: 1, lightning: 0, petLv: 1, ultGain: 1,
     };
     this.picked = {};
@@ -245,6 +255,7 @@ export class Defense {
     this.hero.anim.play('attack', { speed: 1.2 });
     this.addRing(h.root, 0.5, 0x60a5fa);
     this.bulletStyle = BULLET_STYLE[hEntry.id] || 'orb';
+    await this.ensureFireballTemplate();
 
     // Lính: dùng các anh hùng còn lại, nhỏ hơn một chút.
     this.soldierEntries = CATALOG.filter(c => c.role === 'hero' && c.id !== hEntry.id);
@@ -275,11 +286,14 @@ export class Defense {
     for (const side of [-1, 1]) {
       const bank = new THREE.Mesh(new THREE.BoxGeometry(60, 2, 140), new THREE.MeshStandardMaterial({ color: 0x7cc96a }));
       bank.position.set(side * (HALF + 14 + 30), -1.2, -30); bank.receiveShadow = true; s.add(bank);
-      for (let i = 0; i < 60; i++) {
+      const mobile = isMobileGraphics();
+      const treeCount = mobile ? 24 : 60;
+      for (let i = 0; i < treeCount; i++) {
         const t = makeTree(1 + Math.random() * 1.2);
         t.position.set(side * (HALF + 15 + Math.random() * 22), -0.2, 8 - Math.random() * 90); t.rotation.y = Math.random() * 6; s.add(t);
       }
-      for (let i = 0; i < 14; i++) {
+      const rockCount = mobile ? 8 : 14;
+      for (let i = 0; i < rockCount; i++) {
         const r = makeRock(0.8 + Math.random() * 1.4);
         r.position.set(side * (HALF + 3 + Math.random() * 9), -1.45, 4 - Math.random() * 80); s.add(r);
       }
@@ -340,14 +354,43 @@ export class Defense {
     const heroAng = pitch + 0.56 * halfV;              // góc nhìn xuống tới hàng của tướng
     const dist = Math.max((HALF + 1) / Math.tan(halfW), portrait ? 0 : 19);
     const H = dist * Math.sin(heroAng), back = dist * Math.cos(heroAng);
-    this.camBase = new THREE.Vector3(0, H, back);
-    this.camLook = new THREE.Vector3(0, 0, back - H / Math.tan(pitch));
-    cam.position.copy(this.camBase); cam.lookAt(this.camLook);
-    cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+    this.camHome = new THREE.Vector3(0, H, back);
+    this.camLookHome = new THREE.Vector3(0, 0, back - H / Math.tan(pitch));
+    this.applyCameraPose(0);
+  }
+
+  // Lùi camera theo mật độ quái với ngưỡng vào/ra khác nhau để không "thở" liên tục.
+  updateCamera(dt) {
+    let visibleSoon = 0;
+    for (const e of this.enemies || []) if (!e.dead && e.root.position.z > this.visZ - 6) visibleSoon++;
+    let tier = this.cameraDensityTier || 1;
+    if (tier === 1 && visibleSoon >= 18) tier = 1.1;
+    else if (tier === 1.1 && visibleSoon >= 42) tier = 1.2;
+    else if (tier === 1.1 && visibleSoon <= 12) tier = 1;
+    else if (tier === 1.2 && visibleSoon <= 34) tier = 1.1;
+    this.cameraDensityTier = tier;
+    const target = this.boss ? Math.max(1.12, tier) : tier;
+    this.cameraZoom = THREE.MathUtils.lerp(this.cameraZoom || 1, target, 1 - Math.exp(-dt * 2.4));
+    this.applyCameraPose(this.shake * this.shake * 0.6);
+  }
+
+  applyCameraPose(shake = 0) {
+    if (!this.camHome || !this.camLookHome) return;
+    const zoom = this.cameraZoom || 1;
+    if (!this.camBase) this.camBase = new THREE.Vector3();
+    this.camBase.copy(this.camHome).sub(this.camLookHome).multiplyScalar(zoom).add(this.camLookHome);
+    this.camLook = this.camLookHome;
+    this.camera.position.set(this.camBase.x + (Math.random() - 0.5) * shake, this.camBase.y + (Math.random() - 0.5) * shake, this.camBase.z);
+    this.camera.lookAt(this.camLook);
+    this.camera.updateProjectionMatrix(); this.camera.updateMatrixWorld();
+    this.updateVisibleBoundary();
+  }
+
+  updateVisibleBoundary() {
     // visZ: điểm trên mặt cầu ngay dưới HUD phía trên. Quái/hòm/cổng phải vượt qua vạch này
     // mới bị bắn trúng, để mọi cú bắn và sát thương đều nằm trong tầm mắt người chơi.
     const rc = new THREE.Raycaster(), hit = new THREE.Vector3();
-    rc.setFromCamera(new THREE.Vector2(0, 1 - 2 * 150 / innerHeight), cam);
+    rc.setFromCamera(new THREE.Vector2(0, 1 - 2 * 150 / innerHeight), this.camera);
     this.visZ = rc.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit) ? hit.z : -30;
   }
 
@@ -361,13 +404,13 @@ export class Defense {
 
   // ---------- Lính ----------
   addSoldiers(n, silent = false) {
-    this.P.soldiers = THREE.MathUtils.clamp(this.P.soldiers + n, 0, 30);
+    this.P.soldiers = Math.max(0, this.P.soldiers + n);
     this.syncSoldiers();
     if (!silent && n > 0) this.toast(`+${n} ${ic('soldier')}`, '#22c55e');
   }
 
   async syncSoldiers() {
-    const want = () => Math.min(16, this.P.soldiers), runId = this.runId;
+    const want = () => Math.min(MAX_VISIBLE_SOLDIERS, this.P.soldiers), runId = this.runId;
     while (this.soldierUnits.length > want()) {
       const u = this.soldierUnits.pop();
       this.poof(u.root.position, 0xff6b6b);
@@ -531,11 +574,9 @@ export class Defense {
     this.water.position.z = -30 + Math.sin(this.time * 0.5) * 0.4;
     this.leakLine.material.opacity = 0.55 + Math.sin(this.time * 6) * 0.3;
 
-    // Rung màn hình.
+    // Camera lùi mượt khi đàn quái dày lên; rung được áp sau cùng.
     this.shake = Math.max(0, this.shake - realDt * 2.2);
-    const s = this.shake * this.shake * 0.6;
-    this.camera.position.set(this.camBase.x + (Math.random() - 0.5) * s, this.camBase.y + (Math.random() - 0.5) * s, this.camBase.z);
-    this.camera.lookAt(this.camLook);
+    this.updateCamera(realDt);
     this.updateLabels();
     this.updateHud();
   }
@@ -556,11 +597,15 @@ export class Defense {
     let guard = 0;
     while (this.hero.cd <= 0 && guard++ < 4) {
       this.hero.cd += 1 / P.rate;
-      const n = P.multi;
+      const n = Math.min(MAX_VISIBLE_SHOTS, P.multi);
+      // Phần tốc bắn/tia vượt giới hạn hiển thị được quy đổi thành damage, không tạo thêm hiệu ứng.
+      const overflowPower = (P.rawRate / P.rate) * (P.multi / n);
       for (let i = 0; i < n; i++) {
         const off = (i - (n - 1) / 2) * 0.36;
-        const crit = Math.random() < P.crit;
-        this.fire(this.bulletStyle, this.heroX + off, -0.3, off * 0.15, P.dmg * (crit ? 2 : 1), P.pierce, crit);
+        const guaranteedCrits = Math.floor(P.crit);
+        const critTier = guaranteedCrits + (Math.random() < P.crit - guaranteedCrits ? 1 : 0);
+        const dmg = Math.max(1, Math.round(P.dmg * overflowPower * (1 + critTier)));
+        this.fire(this.bulletStyle, this.heroX + off, -0.3, off * 0.15, dmg, P.pierce, critTier > 0);
       }
     }
     // Lính đi theo đội hình và bắn.
@@ -579,14 +624,61 @@ export class Defense {
   }
 
   // ---------- Đạn ----------
+  async ensureFireballTemplate() {
+    if (this.fireballTemplate) return;
+    if (!this.fireballPromise) {
+      this.fireballPromise = spawnModel(FIREBALL_ENTRY, FIREBALL_ENTRY.height).then(({ root }) => {
+        root.traverse(object => {
+          if (!object.isMesh) return;
+          const materials = [].concat(object.material).map(material => {
+            const clone = material.clone();
+            clone.emissive?.set(0xff4d00);
+            if (clone.emissiveIntensity !== undefined) clone.emissiveIntensity = 2.2;
+            return clone;
+          });
+          object.material = Array.isArray(object.material) ? materials : materials[0];
+          object.castShadow = false;
+        });
+        for (const part of [
+          { radius:0.16, y:0.34, color:0xfff1a8, opacity:0.92 },
+          { radius:0.13, y:0.02, color:0xff8a1f, opacity:0.72 },
+          { radius:0.09, y:-0.20, color:0xef3b0a, opacity:0.5 },
+        ]) {
+          const mesh = new THREE.Mesh(
+            new THREE.SphereGeometry(part.radius, 8, 6),
+            new THREE.MeshBasicMaterial({
+              color:part.color, transparent:true, opacity:part.opacity,
+              depthWrite:false, blending:THREE.AdditiveBlending,
+            })
+          );
+          mesh.position.y = part.y;
+          root.add(mesh);
+        }
+        root.position.y = -FIREBALL_ENTRY.height * 0.5;
+        const template = new THREE.Group();
+        template.add(root);
+        this.fireballTemplate = template;
+      }).catch(error => {
+        console.warn('Không tải được model cầu lửa, dùng đạn mặc định.', error);
+        this.fireballTemplate = null;
+        this.fireballPromise = null;
+      });
+    }
+    await this.fireballPromise;
+  }
+
   fire(style, x, z, vx, dmg, pierce, crit) {
     const pool = this.bulletPool[style] || (this.bulletPool[style] = []);
     let mesh = pool.pop();
     if (!mesh) mesh = this.makeBulletMesh(style);
     mesh.position.set(x, style === 'soldier' ? 0.8 : 1.05, z);
-    mesh.scale.setScalar(crit ? 1.5 : 1);
+    const densityScale = THREE.MathUtils.clamp(1 - this.bullets.length / 240, 0.62, 1);
+    mesh.scale.setScalar((crit ? 1.12 : 1) * densityScale);
     mesh.rotation.set(0, Math.atan2(-vx, 1), 0);
     mesh.userData.critGlow.visible = crit;
+    if (mesh.userData.glow) mesh.userData.glow.material.opacity = style === 'soldier' ? 0 : 0.45 * densityScale;
+    if (mesh.userData.trail) mesh.userData.trail.material.opacity = style === 'soldier' ? 0 : 0.5 * densityScale;
+    mesh.userData.critGlow.material.opacity = 0.55 * densityScale;
     this.scene.add(mesh);
     this.bullets.push({ mesh, style, vx: vx * 30, vz: -30, dmg, pierce, crit, hit: pierce ? [] : null });
   }
@@ -596,6 +688,20 @@ export class Defense {
     const S = BULLET_LOOK[style];
     const g = new THREE.Group();
     const add = (m) => { m.renderOrder = 5; g.add(m); return m; };
+    if (style !== 'soldier' && this.fireballTemplate) {
+      const visual = this.fireballTemplate.clone(true);
+      visual.quaternion.setFromUnitVectors(FIREBALL_UP, FIREBALL_FORWARD);
+      g.add(visual);
+      g.userData.core = visual;
+      g.userData.fireball = true;
+      const crit = add(new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex(), color:0xff4d2e, blending:THREE.AdditiveBlending,
+        depthWrite:false, transparent:true, toneMapped:false,
+      })));
+      crit.scale.setScalar(1.35);
+      g.userData.critGlow = crit;
+      return g;
+    }
     const coreGeo = {
       orb: () => new THREE.SphereGeometry(0.2, 12, 8), bolt: () => new THREE.BoxGeometry(0.12, 0.12, 0.7),
       slash: () => new THREE.TorusGeometry(0.42, 0.07, 6, 16, Math.PI), axe: () => new THREE.BoxGeometry(0.42, 0.08, 0.42),
@@ -605,18 +711,18 @@ export class Defense {
     if (style === 'slash') { core.rotation.x = -Math.PI / 2; core.rotation.z = Math.PI; }
     g.userData.core = core;
     const glow = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: S.color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false })));
-    glow.scale.setScalar(S.glow);
+    glow.scale.setScalar(S.glow); g.userData.glow = glow;
     const crit = add(new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xff4d2e, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false })));
     crit.scale.setScalar(S.glow * 1.6); g.userData.critGlow = crit;
     const trail = add(new THREE.Mesh(new THREE.PlaneGeometry(S.trailW, S.trailL), new THREE.MeshBasicMaterial({ map: trailTex(), color: S.color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false, side: THREE.DoubleSide })));
-    trail.rotation.x = -Math.PI / 2; trail.position.set(0, -0.2, S.trailL / 2);
+    trail.rotation.x = -Math.PI / 2; trail.position.set(0, -0.2, S.trailL / 2); g.userData.trail = trail;
     return g;
   }
 
   recycleBullet(b) { b.dead = true; this.scene.remove(b.mesh); this.bulletPool[b.style].push(b.mesh); }
 
   spark(pos, color, size = 1) {
-    if (this.sparks >= 40) return;
+    if (this.sparks >= 18) return;
     this.sparks = (this.sparks || 0) + 1;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
     sp.position.set(pos.x, 1, pos.z); sp.renderOrder = 6;
@@ -626,7 +732,7 @@ export class Defense {
 
   updateBullets(dt) {
     for (const b of this.bullets) {
-      if (b.style === 'axe') b.mesh.userData.core.rotation.y += dt * 18;
+      if (b.style === 'axe' && !b.mesh.userData.fireball) b.mesh.userData.core.rotation.y += dt * 18;
       // Chia nhỏ bước di chuyển để đạn không bay xuyên qua quái khi máy giật.
       const steps = Math.ceil(Math.abs(b.vz * dt) / 0.4);
       for (let i = 0; i < steps && !b.dead; i++) this.stepBullet(b, dt / steps);
@@ -661,7 +767,7 @@ export class Defense {
         if (!this.seen(ep.z, r) || Math.abs(ep.z - p.z) > r + 0.25 || Math.abs(ep.x - p.x) > r + 0.2) continue;
         if (b.hit) { if (b.hit.includes(e)) continue; b.hit.push(e); }
         this.hitEnemy(e, b.dmg, b.crit, true);
-        this.spark(p, b.crit ? 0xff6a3d : BULLET_LOOK[b.style].color, b.crit ? 1.4 : b.style === 'soldier' ? 0.6 : 1);
+        if (b.style !== 'soldier' || Math.random() < 0.2) this.spark(p, b.crit ? 0xff6a3d : BULLET_LOOK[b.style].color, b.crit ? 1.2 : b.style === 'soldier' ? 0.45 : 0.8);
         if (b.pierce-- <= 0) { this.recycleBullet(b); break; }
       }
     }
@@ -671,7 +777,7 @@ export class Defense {
     if (e.dead) return;
     e.hp -= dmg; e.punch = 0.18;
     if (this.P.slow && fromBullet) e.slowT = 1.3;
-    if (crit) this.floatText(e.root.position, e.root.userData.height * e.root.scale.x, ic('burst', 'sm') + fmt(dmg), crit ? '#fbbf24' : '#fff', crit);
+    if (crit && this.floaters.length < 14) this.floatText(e.root.position, e.root.userData.height * e.root.scale.x, ic('burst', 'sm') + fmt(dmg), '#fbbf24', true);
     if (fromBullet && this.P.splash) {
       const r = this.P.splash, c = e.root.position;
       if (Math.random() < 0.5) this.ring(c, r * 0.5, 0xfb923c, 0.3);
@@ -939,9 +1045,9 @@ export class Defense {
     switch (c.kind.k) {
       case 'weapon': {
         const opts = [];
-        if (P.multi < 3) opts.push([ic('arrows') + '+1', () => P.multi++]);
+        opts.push([ic('arrows') + '+1', () => P.multi++]);
         opts.push([ic('chevron') + '+15%', () => P.ratePct += 15], [ic('sword') + '+1', () => P.dmgAdd++]);
-        if (P.pierce < 5) opts.push([ic('target') + '+1', () => P.pierce++]);
+        opts.push([ic('target') + '+1', () => P.pierce++]);
         const [t, f] = pick(opts); f(); this.toast(t, '#67e8f9', true); break;
       }
       case 'squad': this.addSoldiers(2 + Math.floor(Math.random() * 2)); break;
@@ -969,7 +1075,7 @@ export class Defense {
 
   // ---------- Cổng số ----------
   spawnGatePair() {
-    const pool = GATE_TYPES.filter(t => !t.rare || (this.stage() >= 3 && Math.random() < 0.35 && (t.t !== 'multi' || this.P.multi < 5)));
+    const pool = GATE_TYPES.filter(t => !t.rare || (this.stage() >= 3 && Math.random() < 0.35));
     const t0 = pick(pool), rest = pool.filter(t => t !== t0), types = [t0, rest.length ? pick(rest) : t0];
     const z = SPAWN_Z;
     const g = { z, sides: [], group: new THREE.Group(), done: false };
@@ -1047,7 +1153,7 @@ export class Defense {
     if (s.t.t === 'soldier') { this.addSoldiers(v, true); }
     if (s.t.t === 'rate') P.ratePct += v;
     if (s.t.t === 'dmg') P.dmgAdd += v;
-    if (s.t.t === 'multi') P.multi = THREE.MathUtils.clamp(P.multi + v, 1, 5);
+    if (s.t.t === 'multi') P.multi = Math.max(1, P.multi + v);
     this.toast(`${sign}${v}${s.t.pct ? '%' : ''} ${ic(s.t.unit)}`, col, true);
     
   }
@@ -1088,13 +1194,16 @@ export class Defense {
     if (this.boltT > 0) return;
     this.boltT = 2.5;
     const cands = this.enemies.filter(e => !e.dead && this.seen(e.root.position.z, 1)).sort(() => Math.random() - 0.5);
-    for (const e of cands.slice(0, this.P.lightning)) {
+    const visibleBolts = Math.min(MAX_VISIBLE_LIGHTNING, this.P.lightning);
+    const hitCount = Math.min(cands.length, visibleBolts);
+    const power = this.P.lightning / Math.max(1, hitCount);
+    for (const e of cands.slice(0, hitCount)) {
       const p = e.root.position;
       const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 14, 5), new THREE.MeshBasicMaterial({ color: 0xbfdbfe, transparent: true, toneMapped: false }));
       bolt.position.set(p.x, 7, p.z); this.scene.add(bolt);
       this.effects.push({ mesh: bolt, t: 0, life: 0.25, fade: true });
       this.ring(p, 1.2, 0x93c5fd, 0.3);
-      this.hitEnemy(e, this.P.dmg * 6);
+      this.hitEnemy(e, Math.round(this.P.dmg * 6 * power));
     }
   }
 

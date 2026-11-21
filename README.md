@@ -1,8 +1,8 @@
-# Cute 3D Heroes – demo chọn nhân vật
+# Cute 3D Heroes
 
-Demo web 3D (Three.js) để xem và chọn nhân vật chibi cho một game kiểu MOBA/arena.
+Demo web 3D (Three.js) gồm nhiều chế độ game với nhân vật chibi.
 
-- **Showroom:** 24 nhân vật đứng trên sân khấu, bấm vào từng con để xem toàn bộ animation, chọn tướng, thú cưng, boss và các loại quái.
+- **Trang chủ:** chọn tướng bằng giao diện 2D tối ưu cho điện thoại và chọn chế độ chơi. Model 3D chỉ được tải sau khi bắt đầu game.
 - **Chơi thử:** điều khiển tướng đã chọn, đánh các đợt quái, đợt 5, 10, 15... có boss.
 - **Giữ cổng (vô tận):** tướng đứng cuối cây cầu, tự bắn, quái tràn tới mãi. Bắn hòm nhận quà, chọn cổng số (+lính, +% tốc bắn), lên cấp chọn thẻ, boss mỗi 5 đợt, sao để nâng cấp vĩnh viễn. Mở thẳng: `http://localhost:8790/#defense`. Thiết kế: `docs/giu-cong-design.md`.
 - **Đấu trường sinh tồn:** di chuyển tự do, tự động tấn công, nhặt ngọc kinh nghiệm và chọn nâng cấp khi lên cấp. Mở thẳng: `http://localhost:8790/survivor-arena.html`. Thiết kế: `docs/dau-truong-sinh-ton-design.md`.
@@ -38,6 +38,7 @@ Cần internet lần đầu để tải Three.js và font từ CDN. Model nằm 
 | Ultimate Animated Animals | Quaternius | Shiba, Cáo, Husky | https://quaternius.com/packs/ultimateanimatedanimals.html |
 | Dungeon Remastered 1.0 | Kay Lousberg (KayKit) | Rương, chồng vàng, khiên kiếm (icon + hòm quà trong Giữ cổng) | https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0 |
 | Platformer Game Kit, Modular Weapons, Modular Dungeon | Quaternius | Sao, ngọc, tim, bom, kiếm vàng, khiên, đầu lâu, bình thuốc (icon) | https://quaternius.com/packs/ultimateplatformer.html |
+| Sunfall Rift – Ember projectile | 3DAssets.dev | Model cầu lửa GLB 56 tam giác dùng trong Đấu trường sinh tồn | https://3dassets.dev/assets/sunfall-rift-moba-ember-projectile-49569ecb |
 
 File GLB lấy từ GitHub: `KayKit-Game-Assets/KayKit-Character-Pack-*-1.0` và bản GLB đã chuyển sẵn ở `trebeljahr/quaternius-showcase`.
 
@@ -46,7 +47,7 @@ File GLB lấy từ GitHub: `KayKit-Game-Assets/KayKit-Character-Pack-*-1.0` và
 - `js/catalog.js` – danh sách model, vai trò, chỉ số, tên animation. Thêm model mới chỉ cần thêm một dòng ở đây.
 - `js/engine.js` – tải GLB, chuẩn hoá chiều cao, điều khiển animation, cây/đá trang trí.
 - `img/icons/` – icon 3D của Giữ cổng (WEBP 160px). Tạo lại bằng `tools/icon-studio.html`: mở qua server, xem lưới icon, bấm "Tải tất cả" ra PNG rồi chuyển WEBP (`cwebp -q 88 -resize 160 160`). Model nguồn ở `models/props/`; tháp, cờ, cúp, lửa, sét, bông tuyết, mũi tên, bia, nổ là hình tự dựng bằng code.
-- `js/gallery.js` – showroom. `js/game.js` – game arena. `js/defense.js` – chế độ Giữ cổng. `js/state.js` – lựa chọn lưu trong localStorage.
+- `js/main.js` – trang chủ và bộ chọn nhân vật 2D. `js/game.js` – game arena. `js/defense.js` – chế độ Giữ cổng. `js/state.js` – lựa chọn lưu trong localStorage.
 - `survivor-arena.html`, `js/survivor/` – trang và logic riêng của Đấu Trường Sinh Tồn.
 - `docs/dau-truong-sinh-ton-design.md` – kế hoạch chi tiết cho game Đấu Trường Sinh Tồn 360°.
 - `docs/y-tuong-game-sinh-ton.md` – backlog các game survival để nghiên cứu và triển khai sau.

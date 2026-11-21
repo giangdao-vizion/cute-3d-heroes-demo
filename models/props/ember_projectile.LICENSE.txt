@@ -1,0 +1,10 @@
+Ember projectile mesh (Sunfall Rift: MOBA Heroes and Arena)
+
+Source: https://3dassets.dev/assets/sunfall-rift-moba-ember-projectile-49569ecb
+Model: https://cdn.3dassets.dev/assets/22004/v1/model.glb
+License: CC0 1.0 Universal
+License text: https://creativecommons.org/publicdomain/zero/1.0/
+SHA-256: 06c4b237b18efed44fa668e2198249cdd568ba0fd184085e09cf13a1e01c4e5b
+
+The source describes this as a 56-triangle, static, emissive flame-shaped
+projectile. It may be used and modified without attribution.

@@ -1,7 +1,7 @@
 // Game nhỏ kiểu MOBA/arena: điều khiển tướng, đánh các đợt quái, đợt 5 có boss.
 import * as THREE from 'three';
 import { byId } from './catalog.js';
-import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower } from './engine.js';
+import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower, isMobileGraphics } from './engine.js';
 import { selection } from './state.js';
 
 const ARENA = 20;           // bán kính khu vực chơi
@@ -36,7 +36,7 @@ export class Game {
     this.active = true; this.over = false;
     const scene = this.scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9fd8ff);
-    scene.fog = new THREE.Fog(0x9fd8ff, 28, 55);
+    scene.fog = isMobileGraphics() ? null : new THREE.Fog(0x9fd8ff, 28, 55);
     this.camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
     this.sun = addLights(scene, 18);
     this.buildArena();
@@ -81,17 +81,20 @@ export class Game {
     const center = new THREE.Mesh(new THREE.CircleGeometry(3.2, 40), pathMat);
     center.rotation.x = -Math.PI / 2; center.position.y = 0.012; center.receiveShadow = true; s.add(center);
     this.ground = grass;
-    // Hàng rào cây quanh sân.
-    for (let i = 0; i < 70; i++) {
-      const a = (i / 70) * Math.PI * 2 + Math.random() * 0.05, r = ARENA + 2 + Math.random() * 7;
+    const mobile = isMobileGraphics();
+    const treeCount = mobile ? 32 : 70;
+    for (let i = 0; i < treeCount; i++) {
+      const a = (i / treeCount) * Math.PI * 2 + Math.random() * 0.05, r = ARENA + 2 + Math.random() * 7;
       const t = makeTree(0.9 + Math.random() * 0.9); t.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); t.rotation.y = Math.random() * 6; s.add(t);
     }
-    for (let i = 0; i < 18; i++) {
+    const rockCount = mobile ? 10 : 18;
+    for (let i = 0; i < rockCount; i++) {
       const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * (ARENA - 7);
       if (Math.abs(Math.cos(a) * r) < 2.5 || Math.abs(Math.sin(a) * r) < 2.5) continue;
       const k = makeRock(0.6 + Math.random() * 1.2); k.position.x = Math.cos(a) * r; k.position.z = Math.sin(a) * r; s.add(k);
     }
-    for (let i = 0; i < 260; i++) {
+    const flowerCount = mobile ? 40 : 260;
+    for (let i = 0; i < flowerCount; i++) {
       const f = makeFlower(); const a = Math.random() * Math.PI * 2, r = Math.random() * (ARENA + 6);
       f.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); s.add(f);
     }
@@ -192,7 +195,7 @@ export class Game {
     const want = tmp.set(hp.x, 10.5, hp.z + 8.5);
     this.camera.position.lerp(want, Math.min(1, dt * 5));
     this.camera.lookAt(this.camera.position.x, 0.6, this.camera.position.z - 8.5);
-    this.sun.position.set(hp.x + 12, 22, hp.z + 10); this.sun.target.position.copy(hp);
+    // Fixed sun: following the hero rebuilds the shadow map every frame.
     if (this.marker.visible) {
       this.marker.material.opacity -= dt * 1.6; this.marker.scale.multiplyScalar(1 - dt * 2);
       if (this.marker.material.opacity <= 0) this.marker.visible = false;
@@ -358,8 +361,10 @@ export class Game {
 
   shoot(from, target, dmg) {
     const color = from.entry.id === 'Mage' ? 0x8b5cf6 : 0xf59e0b;
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshBasicMaterial({ color }));
-    const glow = new THREE.PointLight(color, 3, 3); mesh.add(glow);
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 10, 8),
+      new THREE.MeshBasicMaterial({ color, toneMapped:false })
+    );
     mesh.position.copy(from.root.position).add(new THREE.Vector3(0, 1.1, 0));
     this.scene.add(mesh);
     this.projectiles.push({ mesh, target, dmg, speed: 16 });

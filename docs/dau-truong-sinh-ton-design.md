@@ -56,7 +56,8 @@ Trang game: `survivor-arena.html`.
 - Mục tiêu thắng: hạ boss cuối ở phút 10.
 - Người chơi có máu, không có cổng cần bảo vệ.
 - Quái chạm người chơi gây sát thương rồi bị đẩy lùi nhẹ; có 0,6 giây miễn nhiễm sau khi trúng đòn.
-- Ngọc kinh nghiệm nằm trên đất; sau 20 giây tự bay về gần người chơi để tránh rác vật thể.
+- Ngọc kinh nghiệm nằm trên đất; sau 45 giây chưa nhặt sẽ tự thu để tránh tích tụ vật thể.
+- Giá trị ngọc tăng theo độ mạnh của quái: tím → kim cương xanh → hồng ngọc → hoàng kim. Vòng tím quanh tướng luôn biểu thị đúng bán kính hút hiện tại.
 - Lên cấp tạm dừng game và hiện 3 thẻ. Đây là điểm nghỉ giúp người mới đọc lựa chọn.
 - Hòm rơi từ quái tinh anh và boss, cho hồi máu hoặc nâng ngẫu nhiên một kỹ năng đang sở hữu.
 - Thua khi máu về 0; thắng khi boss cuối bị hạ.
@@ -65,9 +66,10 @@ Trang game: `survivor-arena.html`.
 
 | Thời gian | Nội dung | Mục đích |
 |---|---|---|
-| 0:00–1:00 | Quái mầm xanh, chuột; mật độ thấp | Học di chuyển và nhặt ngọc |
-| 1:00–2:00 | Ong và đầu lâu bay cắt góc | Buộc đổi hướng |
-| 2:00–3:00 | Nhện trâu, tinh anh đầu tiên | Kiểm tra sát thương |
+| 0:00–0:50 | Chỉ có quái mầm xanh; mật độ thấp | Học di chuyển và nhặt ngọc |
+| 0:50–1:40 | Thêm mầm xanh lực sĩ: to, nhiều máu và có giáp | Giới thiệu biến thể chống chịu |
+| 1:40–2:30 | Thêm chuột trinh sát: ít máu nhưng chạy nhanh | Buộc đổi hướng |
+| 2:30–3:00 | Thêm vệ binh xương có giáp | Kiểm tra sát thương |
 | 3:00 | Boss Khủng long sừng | Boss lao thẳng, dạy né tín hiệu |
 | 3:00–4:30 | Xương chiến binh thành cụm | Khuyến khích sát thương diện rộng |
 | 4:30–6:00 | Xương pháp sư bắn xa, ong bao vây | Ép ưu tiên mục tiêu |
@@ -86,7 +88,7 @@ Giữ chỉ số nền từ `js/catalog.js`, sau đó thêm cấu hình riêng c
 |---|---|---|---|
 | Hiệp sĩ | Sóng kiếm theo hướng di chuyển | Trâu, dễ chơi | Tầm ngắn |
 | Chiến binh rìu | Rìu xoay quanh người | Dọn đàn sát thân | Khó đánh mục tiêu xa |
-| Pháp sư | Cầu phép tự tìm mục tiêu | Tầm xa, nguyên tố mạnh | Máu thấp |
+| Pháp sư | Cầu phép bay thẳng hơi cong | Tầm xa, nguyên tố mạnh | Máu thấp |
 | Sát thủ | Dao bắn về kẻ gần nhất | Tốc đánh cao | Sát thương mỗi đòn thấp |
 | Sát thủ trùm đầu | Nỏ xuyên theo đường thẳng | Hạ hàng quái tốt | Cần định vị |
 
@@ -116,6 +118,13 @@ Mỗi kỹ năng có tối đa 5 cấp. Người chơi mang tối đa 6 kỹ nă
 - Tăng bán kính hút ngọc.
 - Tăng chí mạng.
 
+### Hiệu ứng đòn đánh
+
+- **Sét lan:** mỗi cấp thêm một mục tiêu gần đó; sát thương giảm so với cú đánh chính.
+- **Nổ lan:** fireball gây sát thương vùng quanh mục tiêu; cấp cao tăng bán kính và sát thương.
+- **Băng giá:** làm chậm quái trúng đạn; mỗi cấp tăng hiệu lực và cơ hội đóng băng hoàn toàn trong thời gian ngắn.
+- Các hiệu ứng có thể kết hợp trong cùng một build nhưng sát thương phụ không kích hoạt hiệu ứng lần nữa.
+
 ### Tiến hóa kỹ năng
 
 Kỹ năng chủ động cấp 5 cộng với nội tại đúng cặp sẽ tiến hóa khi mở hòm boss:
@@ -141,6 +150,10 @@ Mỗi loại quái phải tạo một vấn đề khác nhau:
 - **Tinh anh:** bản lớn hơn, có hào quang và một thuộc tính ngẫu nhiên như nhanh, giáp hoặc nổ khi chết.
 
 Không sinh quái ngay trong vùng an toàn quanh người chơi hoặc trong vùng camera đang nhìn thấy quá gần.
+Mỗi loại hoặc biến thể mới được mở theo màn 50 giây, kèm thẻ giới thiệu 5 giây ở góc màn hình với tên, máu, giáp và tốc độ.
+Từ màn 3, mỗi nhịp sinh có thể đưa nhiều quái vào cùng lúc; kích thước đàn và giới hạn quái sống tiếp tục tăng theo màn nhưng không vượt trần mobile.
+
+Đòn đánh thường chỉ khóa hướng khi mục tiêu nằm trong tầm bắn. Đạn bay thẳng với độ cong nhỏ, không tiếp tục truy đuổi mục tiêu và biến mất khi đi hết tầm. Tầm bắn khởi đầu phải nằm trong vùng quan sát mobile và chỉ tăng qua thẻ nâng cấp; camera tăng FOV tương ứng để toàn bộ tầm bắn mới vẫn hữu ích.
 
 ### Boss
 
