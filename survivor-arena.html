@@ -123,6 +123,30 @@
   .dock-card.risk { border-color:#f59e0b; box-shadow:0 3px 0 #f59e0b; background:linear-gradient(180deg,#fffbeb,#ffedd5); }
   .dock-card.risk .stat { color:#c2410c; }
   .dock-card.risk .card-lv { background:#ffedd5; color:#c2410c; }
+  .dock-card.evolve { border-color:#22d3ee; box-shadow:0 3px 0 #67e8f9; background:linear-gradient(180deg,#ecfeff,#cffafe); }
+  .dock-card.evolve .stat { color:#0e7490; }
+  .dock-card.evolve .card-lv { background:#cffafe; color:#0e7490; }
+  .dock-card.sidearm { border-color:#a78bfa; box-shadow:0 3px 0 #c4b5fd; background:linear-gradient(180deg,#f5f3ff,#ede9fe); }
+  .dock-card.sidearm .stat { color:#6d28d9; }
+  .dock-card.sidearm .card-lv { background:#ede9fe; color:#6d28d9; }
+  #objectiveHud {
+    position:absolute; left:10px; top:calc(78px + env(safe-area-inset-top));
+    max-width:min(200px,52vw); padding:6px 10px; border-radius:14px;
+    background:rgba(43,35,64,.78); border:2px solid rgba(255,255,255,.45);
+    font-size:12px; font-weight:800; line-height:1.25; pointer-events:none;
+  }
+  #objectiveHud b { display:block; font-size:13px; }
+  #objectiveHud span { color:#fde68a; margin-right:6px; }
+  #objectiveHud small { opacity:.85; }
+  .meta-shop { margin-top:10px; padding-top:8px; border-top:2px dashed #eee3d3; }
+  .meta-shop small { display:block; color:#6b6280; font-weight:700; margin-bottom:4px; }
+  #modePick .mode-btns { display:grid; gap:10px; margin:14px 0 6px; }
+  #modePick .mode-btns button {
+    width:100%; min-height:64px; padding:12px 14px; border:2px solid #eee3d3; border-radius:16px;
+    background:#fff; color:var(--ink); font:inherit; font-weight:800; text-align:left; cursor:pointer;
+  }
+  #modePick .mode-btns button small { display:block; margin-top:3px; color:#6b6280; font-size:12px; font-weight:700; }
+  #modePick .mode-btns button.primary { border-color:#ff7a59; background:#fff7f2; }
   #attrBadge { position:absolute; left:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; z-index:1; }
   #attrSheet {
     position:fixed; top:0; left:0; bottom:0; right:0; z-index:9;
@@ -160,12 +184,13 @@
   #joystick { position:fixed; z-index:4; width:112px; height:112px; margin:-56px; border-radius:50%; border:3px solid rgba(255,255,255,.7); background:rgba(43,35,64,.22); pointer-events:none; }
   #stick { position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px; border-radius:50%; background:rgba(255,255,255,.86); box-shadow:0 3px 12px rgba(0,0,0,.25); }
 
-  #modal, #loading {
+  #modal, #loading, #modePick {
     position:fixed; top:0; left:0; bottom:0; right:0; z-index:8;
     display:flex; align-items:center; justify-content:center;
     padding:14px; background:rgba(43,35,64,.5); touch-action:manipulation;
   }
   #loading { z-index:10; flex-direction:column; background:var(--ground); font-size:23px; font-weight:800; }
+  #modePick { z-index:11; }
   #loading .loadbar { width:min(300px,75vw); height:14px; margin-top:10px; border-radius:99px; background:#fff; overflow:hidden; }
   #loadFill { display:block; width:8%; height:100%; background:var(--accent); transition:width .25s; }
   #loadText { margin-top:5px; font-size:14px; }
@@ -235,6 +260,7 @@
   </div>
   <div id="enemyIntro" class="hidden" aria-live="polite"></div>
   <div class="xp"><i id="xpFill"></i><span id="level">Cấp 1</span></div>
+  <div id="objectiveHud" class="hidden" aria-live="polite"></div>
   <div id="eventBanner" class="hidden" aria-live="polite"></div>
   <div id="hint">WASD hoặc kéo để di chuyển</div>
 </div>
@@ -257,7 +283,18 @@
 <div id="toast"></div>
 <div id="damageFlash"></div>
 <div id="modal" class="hidden"></div>
-<div id="loading">Đang mở đấu trường…
+<div id="modePick" class="hidden">
+  <div class="box">
+    <h2>Chọn chế độ</h2>
+    <p>Chuẩn có đích thắng phút 10. Endless chơi vô hạn với late-game đầy đủ.</p>
+    <div class="mode-btns">
+      <button type="button" id="modeStandard" class="primary">Chuẩn 10 phút<small>Boss cuối · nhận sao · có thể sang Endless sau thắng</small></button>
+      <button type="button" id="modeEndless">Endless<small>Không giới hạn thời gian · nhiệm vụ · tiến hóa · biến dị</small></button>
+    </div>
+    <div class="actions"><a class="alt" href="index.html">Về sảnh</a></div>
+  </div>
+</div>
+<div id="loading" class="hidden">Đang mở đấu trường…
   <div class="loadbar"><i id="loadFill"></i></div>
   <div id="loadText">Đang tải anh hùng</div>
 </div>

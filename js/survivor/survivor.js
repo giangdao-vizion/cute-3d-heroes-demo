@@ -3,6 +3,12 @@ import { byId } from '../catalog.js';
 import { selection } from '../state.js';
 import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower, isMobileGraphics } from '../engine.js';
 import { bindLobbyLinks } from '../lobby-nav.js';
+import {
+  WIN_TIME, OBJECTIVE_INTERVAL, FINAL_BOSS_WAVE,
+  MUTATIONS, SIDEARM_UNLOCK,
+  getSavedMode, setSavedMode, loadStars, saveStars, loadMeta, saveMeta,
+  computeRunStars, availableEvolutions, availableMutations, pickObjective,
+} from './late-game.js';
 
 const ARENA = 27;
 const ARENA_MIN = 12;
@@ -837,6 +843,7 @@ export class SurvivorGame {
 
     this.enemies = [];
     this.projectiles = [];
+    this.sidearmProjectiles = [];
     this.pickups = [];
     this.fieldDrops = [];
     this.combatEffects = [];
@@ -865,6 +872,16 @@ export class SurvivorGame {
     this.attrs = { str:0, agi:0, vit:0, def:0, cri:0, pull:0, regen:0, mass:0 };
     this.regenGate = 0;
     this.synergies = { frostBurst:false, stormVolley:false, shrapnel:false, frostburn:false };
+    this.evolves = {};
+    this.mutations = {};
+    this.evolveTokens = 0;
+    this.bossKills = 0;
+    this.runMode = getSavedMode(); // 'standard' | 'endless'
+    this.victoryPending = false;
+    this.finalBossSpawned = false;
+    this.objective = null;
+    this.objectiveClock = OBJECTIVE_INTERVAL * 0.55;
+    this.sidearmProjectiles = [];
     this.burnTick = 0;
     this.bossSpawned = {};
     this.bossWave = 0;
@@ -874,12 +891,17 @@ export class SurvivorGame {
     this.tempBuffs = {};
     this.eventBannerText = '';
     this.eventBannerT = 0;
+    const meta = loadMeta();
+    const metaDmg = 1 + (meta.dmgRanks || 0) * 0.03;
+    const metaXp = 1 + (meta.xpRanks || 0) * 0.04;
+    this.metaXpMult = metaXp;
     this.power = {
-      damage:1, damageBonus:1, interval:0.72, multi:1, pierce:0, size:1,
+      damage:1, damageBonus:metaDmg, interval:0.72, multi:1, pierce:0, size:1,
       magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
       chain:0, blast:0, freeze:0, burnAura:0, orbit:0, takenDamageMult:1,
       vamp:0, luck:0, elite:0,
       vampRate:0, luckXp:1, eliteMult:1,
+      sidearm:0, sidearmInterval:1.15, sidearmClock:0.8,
     };
     this.orbitAngle = 0;
     this.orbitTick = 0;
@@ -1180,10 +1202,10 @@ export class SurvivorGame {
       const dx = enemy.root.position.x - heroPos.x;
       const dz = enemy.root.position.z - heroPos.z;
       if (dx * dx + dz * dz > radiusSq) continue;
-      this.hitEnemy(enemy, damage);
-      if (this.synergies.frostburn) {
-        enemy.slowT = Math.max(enemy.slowT, 0.55);
-        enemy.slowFactor = Math.min(enemy.slowFactor, 0.72);
+      this.hitEnemy(enemy, damage * (this.evolves.evoFrostburn || this.evolves.evoRing ? 1.35 : 1));
+      if (this.synergies.frostburn || this.evolves.evoFrostburn) {
+        enemy.slowT = Math.max(enemy.slowT, this.evolves.evoFrostburn ? 1.1 : 0.55);
+        enemy.slowFactor = Math.min(enemy.slowFactor, this.evolves.evoFrostburn ? 0.55 : 0.72);
       }
     }
   }
@@ -1336,11 +1358,12 @@ export class SurvivorGame {
     if (this.orbitTick > 0) return;
     this.orbitTick = 0.14;
 
-    const hitR = this.orbitOrbHitRadius();
+    const hitR = this.orbitOrbHitRadius() * (this.evolves.evoRing ? 1.2 : 1);
     const hitRSq = hitR * hitR;
-    const damage = this.orbitDps() * 0.14;
+    const damage = this.orbitDps() * 0.14 * (this.evolves.evoRing ? 1.4 : 1);
     const heroPos = this.hero.root.position;
     const orbs = this.hero.orbitOrbs;
+    const ringBurn = !!this.evolves.evoRing;
 
     for (const enemy of this.enemies) {
       if (enemy.dead) continue;
@@ -1353,6 +1376,10 @@ export class SurvivorGame {
         const dz = ez - oz;
         if (dx * dx + dz * dz <= hitRSq) {
           this.hitEnemy(enemy, damage);
+          if (ringBurn) {
+            enemy.slowT = Math.max(enemy.slowT, 0.4);
+            enemy.slowFactor = Math.min(enemy.slowFactor, 0.7);
+          }
           break;
         }
       }
@@ -1467,16 +1494,20 @@ export class SurvivorGame {
       this.updateRegen(dt);
       this.updateBurnAuraCombat(dt);
       this.updateOrbitCombat(dt);
+      this.updateSidearm(dt);
       this.updateSpawner(dt);
       this.updateBossEvents();
+      this.updateObjectives(dt);
       this.updateSafeRing(dt);
       this.updateEnemies(dt);
       this.updateProjectiles(dt);
+      this.updateSidearmProjectiles(dt);
       this.updateCombatEffects(dt);
       this.updatePickups(dt);
       this.updateFieldDrops(dt);
       this.updateEnemyIntro(dt);
       this.updateEventBanner(dt);
+      this.checkStandardVictoryTimer();
       this.updateCamera(dt);
       this.hintClock -= dt;
       if (this.hintClock <= 0) this.ui.hint.style.opacity = '0';
@@ -1604,7 +1635,9 @@ export class SurvivorGame {
   }
 
   showPauseModal() {
-    this.ui.modal.innerHTML = `<div class="box"><h2>Tạm dừng</h2><p>Trận đấu đang được đóng băng.</p><div class="actions"><button id="resume">Tiếp tục</button><button id="pauseAttrs" class="alt">Thuộc tính</button><a class="alt" href="index.html">Về sảnh</a></div></div>`;
+    const modeLabel = this.runMode === 'endless' ? 'Endless' : 'Chuẩn 10 phút';
+    const stars = loadStars();
+    this.ui.modal.innerHTML = `<div class="box"><h2>Tạm dừng</h2><p>${modeLabel} · ${stars}★ meta · token tiến hóa: ${this.evolveTokens || 0}</p><div class="actions"><button id="resume">Tiếp tục</button><button id="pauseAttrs" class="alt">Thuộc tính</button><a class="alt" href="index.html">Về sảnh</a></div></div>`;
     this.ui.modal.classList.remove('hidden');
     this.ui.modal.querySelector('#resume').onclick = () => this.togglePause();
     this.ui.modal.querySelector('#pauseAttrs').onclick = () => this.openAttrSheet();
@@ -1614,50 +1647,82 @@ export class SurvivorGame {
   buildLevelUpHand() {
     const specials = SPECIAL_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
     const risks = RISK_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
+    const evolves = availableEvolutions(this);
+    const mutations = availableMutations(this).filter(m => m.id !== 'mutOverflow');
     const hand = [];
     const seen = new Set();
     let riskPicked = 0;
-    const pool = [...specials, ...risks];
-    if (this.canSpendAnyAttr()) {
-      // Bias lightly toward offering an attribute point each level-up.
-      pool.push(ATTR_POINT_CARD, ATTR_POINT_CARD);
+    let mutationPicked = 0;
+    const specialsLeft = specials.length;
+    const lateGame = this.level >= 35 || specialsLeft <= 3;
+
+    // Evolve luôn ưu tiên khi đủ điều kiện (hoặc có token).
+    if (evolves.length && (this.evolveTokens > 0 || lateGame || Math.random() < 0.9)) {
+      shuffle(evolves);
+      const evoSlots = this.evolveTokens > 0 ? 1 : Math.min(2, evolves.length);
+      for (const evo of evolves) {
+        if (hand.length >= evoSlots) break;
+        if (seen.has(evo.id)) continue;
+        seen.add(evo.id);
+        hand.push(evo);
+      }
     }
-    // After level 8, attribute points appear less often.
+
+    const canUnlockSidearm = (this.level >= 20 || this.elapsed >= 240)
+      && (this.power.sidearm || 0) === 0
+      && !seen.has(SIDEARM_UNLOCK.id);
+    const canUpgradeSidearm = (this.power.sidearm || 0) > 0
+      && (this.power.sidearm || 0) < SIDEARM_UNLOCK.max
+      && !seen.has(SIDEARM_UNLOCK.id);
+
+    const pool = [...specials, ...risks];
+    if (canUnlockSidearm || canUpgradeSidearm) pool.push(SIDEARM_UNLOCK, SIDEARM_UNLOCK);
+    if (this.canSpendAnyAttr()) pool.push(ATTR_POINT_CARD, ATTR_POINT_CARD);
     if (this.level >= 8 && Math.random() < 0.45) {
       for (let i = pool.length - 1; i >= 0; i--) {
         if (pool[i].id === 'attrPoint') pool.splice(i, 1);
       }
     }
+    if (lateGame && mutations.length) {
+      pool.push(...shuffle([...mutations]).slice(0, 4));
+    }
     shuffle(pool);
 
     const tryAdd = (card) => {
       if (hand.length >= 3 || seen.has(card.id)) return;
-      // Trong 3 lựa chọn chỉ được tối đa 1 thẻ rủi ro.
       if (card.kind === 'risk') {
         if (riskPicked >= 1) return;
         riskPicked++;
+      }
+      if (card.kind === 'mutation') {
+        // Late-game: cho tới 3 mutation; sớm hơn tối đa 1.
+        const mutCap = specialsLeft === 0 ? 3 : 1;
+        if (mutationPicked >= mutCap) return;
+        mutationPicked++;
       }
       seen.add(card.id);
       hand.push(card);
     };
 
     for (const card of pool) tryAdd(card);
-    if (hand.length < 3 && this.canSpendAnyAttr() && !seen.has(ATTR_POINT_CARD.id)) {
-      tryAdd(ATTR_POINT_CARD);
-    }
-    // Bù thiếu bằng skill thường / điểm thuộc tính — không thêm rủi ro thứ hai.
+    if (hand.length < 3 && this.canSpendAnyAttr() && !seen.has(ATTR_POINT_CARD.id)) tryAdd(ATTR_POINT_CARD);
     for (const card of specials) tryAdd(card);
     if (hand.length < 3 && this.canSpendAnyAttr()) tryAdd(ATTR_POINT_CARD);
-    if (!hand.length) {
-      hand.push({
-        id:'overflowDamage',
-        icon:'⚔',
-        name:'Sức mạnh vô hạn',
-        desc:'+10% sát thương',
-        kind:'overflow',
-        max:999,
-        apply:g => { g.power.damageBonus *= 1.1; g.recalcAttributes(); },
-      });
+    if (hand.length < 3 && mutations.length) {
+      for (const m of shuffle([...mutations])) tryAdd(m);
+    }
+    // Sau full: đủ 3 lựa chọn mutation/overflow — không còn 1 thẻ +% đơn độc.
+    if (hand.length < 3) {
+      const late = availableMutations(this);
+      shuffle(late);
+      for (const m of late) {
+        if (hand.length >= 3) break;
+        if (m.id === 'mutOverflow' || !seen.has(m.id)) {
+          if (m.id !== 'mutOverflow') seen.add(m.id);
+          hand.push(m);
+        }
+      }
+      while (hand.length < 3) hand.push(MUTATIONS.find(m => m.id === 'mutOverflow'));
     }
     return hand.slice(0, 3);
   }
@@ -1687,7 +1752,8 @@ export class SurvivorGame {
   }
 
   grantXp(amount) {
-    this.xp += Math.max(0, amount);
+    const scaled = Math.max(0, amount) * (this.metaXpMult || 1);
+    this.xp += scaled;
     while (this.xp >= this.xpNeeded()) {
       this.xp -= this.xpNeeded();
       this.level++;
@@ -1750,11 +1816,223 @@ export class SurvivorGame {
 
   async updateBossEvents() {
     // Boss đầu tiên ở phút 1, rồi mỗi phút một con mạnh hơn.
-    const dueWave = Math.floor(this.elapsed / 60);
+    let dueWave = Math.floor(this.elapsed / 60);
+    if (this.runMode === 'standard') dueWave = Math.min(dueWave, FINAL_BOSS_WAVE);
     while (this.bossWave < dueWave) {
       this.bossWave++;
       await this.spawnEscalatingBoss(this.bossWave);
     }
+  }
+
+  checkStandardVictoryTimer() {
+    if (this.runMode !== 'standard' || this.victoryPending || this.state !== 'playing') return;
+    // Boss cuối xuất hiện ở phút 10; thắng khi hạ xong (xem hitEnemy).
+    if (this.elapsed >= WIN_TIME && this.bossWave >= FINAL_BOSS_WAVE) {
+      const livingFinal = this.enemies.some(e => e.isBoss && e.isFinalBoss && !e.dead);
+      const anyBoss = this.enemies.some(e => e.isBoss && !e.dead);
+      if (!livingFinal && !anyBoss && this.finalBossSpawned) this.victory();
+    }
+  }
+
+  /** Dao quỹ đạo — vũ khí phụ tự bắn mục tiêu gần. */
+  updateSidearm(dt) {
+    const rank = this.power.sidearm || 0;
+    if (rank <= 0 || !this.hero) return;
+    this.power.sidearmClock -= dt;
+    if (this.power.sidearmClock > 0) return;
+    const interval = (this.power.sidearmInterval || 1.15) * (this.evolves.evoSidearm ? 0.75 : 1);
+    this.power.sidearmClock = interval;
+    const range = (this.power.range * 0.85) + rank * 0.35;
+    const rangeSq = range * range;
+    const alive = this.enemies.filter(e => !e.dead && e.root.position.distanceToSquared(this.hero.root.position) <= rangeSq);
+    if (!alive.length) return;
+    alive.sort((a, b) => a.root.position.distanceToSquared(this.hero.root.position) - b.root.position.distanceToSquared(this.hero.root.position));
+    const count = this.evolves.evoSidearm ? Math.min(3, alive.length) : 1;
+    for (let i = 0; i < count; i++) this.spawnSidearmShot(alive[i], rank);
+  }
+
+  spawnSidearmShot(target, rank) {
+    const mesh = new THREE.Mesh(
+      new THREE.ConeGeometry(0.12, 0.55, 5),
+      new THREE.MeshBasicMaterial({ color:0xc4b5fd, toneMapped:false })
+    );
+    mesh.position.copy(this.hero.root.position);
+    mesh.position.y = 0.9;
+    tmp.copy(target.root.position).sub(this.hero.root.position);
+    tmp.y = 0;
+    if (tmp.lengthSq() < 0.001) tmp.set(0, 0, -1);
+    tmp.normalize();
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tmp);
+    this.scene.add(mesh);
+    const dmg = this.hero.dmg * this.power.damage * (0.55 + rank * 0.12) * (this.tempBuffs.damage?.mult || 1);
+    this.sidearmProjectiles.push({
+      mesh,
+      velocity:tmp.clone().multiplyScalar(16 + rank),
+      damage:dmg,
+      distance:0,
+      maxDistance:this.power.range * 0.9 + rank * 0.4,
+      hits:new Set(),
+      remaining:this.evolves.evoSidearm ? 2 : 0,
+      radius:0.35,
+    });
+  }
+
+  updateSidearmProjectiles(dt) {
+    if (!this.sidearmProjectiles?.length) return;
+    for (const shot of this.sidearmProjectiles) {
+      if (shot.removed) continue;
+      const step = shot.velocity.clone().multiplyScalar(dt);
+      shot.mesh.position.add(step);
+      shot.distance += step.length();
+      for (const enemy of this.enemies) {
+        if (enemy.dead || shot.hits.has(enemy)) continue;
+        const dx = enemy.root.position.x - shot.mesh.position.x;
+        const dz = enemy.root.position.z - shot.mesh.position.z;
+        const hitR = enemy.radius + shot.radius;
+        if (dx * dx + dz * dz > hitR * hitR) continue;
+        this.hitEnemy(enemy, shot.damage, { canCrit:true });
+        if (this.objective?.metric === 'bossHit' && enemy.isBoss) this.objective.progress = (this.objective.progress || 0) + 1;
+        shot.hits.add(enemy);
+        if (shot.remaining > 0) shot.remaining--;
+        else { shot.removed = true; break; }
+      }
+      if (shot.distance >= shot.maxDistance) shot.removed = true;
+      if (shot.removed) {
+        this.scene.remove(shot.mesh);
+        shot.mesh.geometry?.dispose();
+        shot.mesh.material?.dispose();
+      }
+    }
+    this.sidearmProjectiles = this.sidearmProjectiles.filter(s => !s.removed);
+  }
+
+  updateObjectives(dt) {
+    if (this.objective) {
+      this.objective.t -= dt;
+      if (this.objective.metric === 'survive') {
+        this.objective.progress = (this.objective.progress || 0) + dt;
+      }
+      this.renderObjectiveHud();
+      if ((this.objective.progress || 0) >= this.objective.target) {
+        this.completeObjective(true);
+        return;
+      }
+      if (this.objective.t <= 0) {
+        this.completeObjective(false);
+        return;
+      }
+      return;
+    }
+    this.objectiveClock -= dt;
+    if (this.objectiveClock > 0) return;
+    // Bắt đầu objective sau phút ~1.5
+    if (this.elapsed < 90) {
+      this.objectiveClock = 20;
+      return;
+    }
+    this.startObjective();
+  }
+
+  startObjective() {
+    const def = pickObjective(this);
+    let target = def.target;
+    let metric = def.metric;
+    // Không có boss → đổi bossChip thành hạ quái.
+    if (metric === 'bossHit' && !this.enemies.some(e => e.isBoss && !e.dead)) {
+      metric = 'kills';
+      target = 12;
+    }
+    this.objective = {
+      ...def,
+      metric,
+      target,
+      t:def.duration,
+      progress:0,
+      startKills:this.kills,
+      startElites:this._eliteKills || 0,
+      startGems:this.gems,
+    };
+    this.flashEvent(`${def.icon} Nhiệm vụ: ${def.name}`, 3.2);
+    this.toast(`${def.icon} ${def.name}`);
+    this.renderObjectiveHud();
+  }
+
+  completeObjective(success) {
+    const obj = this.objective;
+    this.objective = null;
+    this.objectiveClock = OBJECTIVE_INTERVAL * (0.85 + Math.random() * 0.3);
+    this.renderObjectiveHud();
+    if (!success || !obj) {
+      this.toast('Nhiệm vụ thất bại');
+      return;
+    }
+    this.flashEvent(`${obj.icon} Hoàn thành: ${obj.name}!`, 3);
+    switch (obj.reward) {
+      case 'heal':
+        this.grantHealthPotion(Math.round(this.hero.maxHp * 0.4));
+        break;
+      case 'xp':
+        this.grantXp(28 + this.level);
+        break;
+      case 'attr':
+        this.attrPoints += 1;
+        this.updateAttrBadge();
+        this.renderAttrRows();
+        this.toast('◎ +1 điểm thuộc tính');
+        break;
+      case 'evolveToken':
+        this.evolveTokens++;
+        this.toast('⚡ +1 token tiến hóa');
+        if (!this.isLevelUpOpen()) {
+          this.pendingLevels++;
+          this.showLevelUp();
+        } else this.pendingLevels++;
+        break;
+      case 'mutation': {
+        const muts = availableMutations(this).filter(m => m.id !== 'mutOverflow');
+        if (muts.length) {
+          const m = muts[Math.floor(Math.random() * muts.length)];
+          this.upgradeLevels[m.id] = (this.upgradeLevels[m.id] || 0) + 1;
+          m.apply(this);
+          this.toast(`${m.icon} Thưởng biến dị: ${m.name}`);
+        } else {
+          this.power.damageBonus *= 1.08;
+          this.recalcAttributes();
+          this.toast('⚔ +8% sát thương');
+        }
+        break;
+      }
+      default:
+        this.grantXp(16);
+    }
+  }
+
+  renderObjectiveHud() {
+    const el = this.ui.objective;
+    if (!el) return;
+    if (!this.objective) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    const o = this.objective;
+    const prog = Math.min(o.target, Math.floor(o.progress || 0));
+    el.classList.remove('hidden');
+    el.innerHTML = `<b>${o.icon} ${o.name}</b><span>${prog}/${o.target}</span><small>${Math.ceil(o.t)}s</small>`;
+  }
+
+  trackObjectiveKill(enemy) {
+    const o = this.objective;
+    if (!o) return;
+    if (o.metric === 'kills') o.progress = (o.progress || 0) + 1;
+    if (o.metric === 'elites' && enemy.isElite) o.progress = (o.progress || 0) + 1;
+    if (o.metric === 'bossHit' && enemy.isBoss) o.progress = o.target;
+  }
+
+  trackObjectiveGems(value) {
+    const o = this.objective;
+    if (!o || o.metric !== 'gemValue') return;
+    o.progress = (o.progress || 0) + value;
   }
 
   buildBossEvent(wave) {
@@ -1799,7 +2077,17 @@ export class SurvivorGame {
 
   async spawnEscalatingBoss(wave) {
     const event = this.buildBossEvent(wave);
-    this.flashEvent(`${event.icon} Boss đợt ${wave}: ${event.name} (${event.focusLabel})`, 4.4);
+    if (this.runMode === 'standard' && wave === FINAL_BOSS_WAVE) {
+      event.name = `BOSS CUỐI · ${event.name}`;
+      event.hp = Math.round(event.hp * 1.65);
+      event.dmg = Math.round(event.dmg * 1.25);
+      event.scale = Math.min(2.05, event.scale + 0.18);
+      event.isFinalBoss = true;
+      this.finalBossSpawned = true;
+      this.flashEvent(`${event.icon} BOSS CUỐI phút 10 — hạ để thắng!`, 5);
+    } else {
+      this.flashEvent(`${event.icon} Boss đợt ${wave}: ${event.name} (${event.focusLabel})`, 4.4);
+    }
     this.toast(`${event.icon} ${event.name}`);
     await this.spawnBoss(event);
   }
@@ -1830,6 +2118,7 @@ export class SurvivorGame {
     enemy.visualScale = event.scale;
     enemy.radius *= event.scale * 1.15;
     enemy.isBoss = true;
+    enemy.isFinalBoss = !!event.isFinalBoss;
     enemy.bossWave = event.wave || 1;
     enemy.bossName = event.name;
     enemy.bossIcon = event.icon;
@@ -1914,19 +2203,55 @@ export class SurvivorGame {
   /** Chọn thẻ kỹ năng còn nâng cấp được (ưu tiên chưa có). */
   pickRandomSkillUpgrade() {
     const available = SPECIAL_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
+    if ((this.level >= 20 || this.elapsed >= 240) && (this.power.sidearm || 0) < SIDEARM_UNLOCK.max) {
+      available.push(SIDEARM_UNLOCK);
+    }
+    const evolves = availableEvolutions(this);
+    if (evolves.length && Math.random() < 0.35) return evolves[Math.floor(Math.random() * evolves.length)];
     if (!available.length) return null;
-    const fresh = available.filter(card => !(this.upgradeLevels[card.id]));
+    const fresh = available.filter(card => !(this.upgradeLevels[card.id]) && card.id !== 'sidearm');
     const pool = fresh.length ? fresh : available;
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   grantSkillUpgrade(skill) {
     if (!skill) {
+      // Late-game: token tiến hóa hoặc mutation thay vì chỉ attr.
+      const evolves = availableEvolutions(this);
+      if (evolves.length) {
+        this.evolveTokens++;
+        this.toast('⚡ +1 token tiến hóa');
+        this.flashEvent('⚡ Thẻ đổi thành token tiến hóa', 2.6);
+        if (!this.isLevelUpOpen()) { this.pendingLevels++; this.showLevelUp(); }
+        else this.pendingLevels++;
+        return;
+      }
+      const muts = availableMutations(this).filter(m => m.id !== 'mutOverflow');
+      if (muts.length) {
+        const m = muts[Math.floor(Math.random() * muts.length)];
+        this.upgradeLevels[m.id] = (this.upgradeLevels[m.id] || 0) + 1;
+        m.apply(this);
+        this.toast(`${m.icon} Biến dị: ${m.name}`);
+        return;
+      }
       this.attrPoints++;
       this.updateAttrBadge();
       this.renderAttrRows();
       this.toast('◎ +1 điểm thuộc tính (thẻ đã max)');
       this.flashEvent('◎ Đổi thẻ thành điểm thuộc tính', 2.4);
+      return;
+    }
+    if (skill.kind === 'sidearm') {
+      skill.apply(this);
+      this.upgradeLevels.sidearm = this.power.sidearm;
+      this.toast(`${skill.icon} ${skill.name} cấp ${this.power.sidearm}`);
+      return;
+    }
+    if (skill.kind === 'evolve') {
+      this.upgradeLevels[skill.id] = (this.upgradeLevels[skill.id] || 0) + 1;
+      skill.apply(this);
+      this.flashEvent(`${skill.icon} Tiến hóa: ${skill.name}`, 3.2);
+      this.toast(`${skill.icon} ${skill.name}`);
       return;
     }
     const level = this.upgradeLevels[skill.id] || 0;
@@ -2196,14 +2521,15 @@ export class SurvivorGame {
     if (P.freeze > 0 && !primary.dead) this.applyFreeze(primary);
 
     if (P.blast > 0) {
-      const radius = 1.2 + P.blast * 0.35;
-      const splashDamage = damage * (0.25 + P.blast * 0.05);
+      const nova = !!this.evolves.evoNova;
+      const radius = (1.2 + P.blast * 0.35) * (nova ? 1.55 : 1);
+      const splashDamage = damage * (0.25 + P.blast * 0.05) * (nova ? 1.25 : 1);
       for (const enemy of this.enemies) {
         if (enemy.dead || projectile.secondaryHits.has(enemy)) continue;
         if (enemy.root.position.distanceToSquared(origin) <= radius * radius) {
           projectile.secondaryHits.add(enemy);
           this.hitEnemy(enemy, splashDamage);
-          if (this.synergies.frostBurst) this.applyFreeze(enemy, Math.max(1, P.freeze));
+          if (this.synergies.frostBurst || nova) this.applyFreeze(enemy, Math.max(1, P.freeze + (nova ? 1 : 0)));
         }
       }
       this.addBlastEffect(origin, radius);
@@ -2211,22 +2537,25 @@ export class SurvivorGame {
 
     // Mảnh nổ: mỗi lần xuyên (từ hit thứ 2) nổ nhỏ quanh mục tiêu.
     if (this.synergies.shrapnel && hitCount >= 2) {
-      const radius = 0.95;
+      const evo = !!this.evolves.evoShrapnel;
+      const radius = evo ? 1.35 : 0.95;
+      const shred = damage * (evo ? 0.38 : 0.22);
       for (const enemy of this.enemies) {
         if (enemy.dead || enemy === primary) continue;
         if (enemy.root.position.distanceToSquared(origin) <= radius * radius) {
-          this.hitEnemy(enemy, damage * 0.22);
+          this.hitEnemy(enemy, shred);
         }
       }
       this.addBlastEffect(origin, radius);
     }
 
-    const chainJumps = P.chain + (this.synergies.stormVolley ? Math.max(0, P.multi - 1) : 0);
+    let chainJumps = P.chain + (this.synergies.stormVolley ? Math.max(0, P.multi - 1) : 0);
+    if (this.evolves.evoStorm) chainJumps = Math.max(chainJumps * 2, chainJumps + 3);
     if (chainJumps > 0) {
       // Set riêng — không bị blast “nuốt” mục tiêu khiến tia sét không bao giờ nhảy.
       const used = new Set([primary]);
-      const chainRange = 4.6 + P.chain * 0.45;
-      const chainDamage = damage * (0.3 + P.chain * 0.04);
+      const chainRange = (4.6 + P.chain * 0.45) * (this.evolves.evoStorm ? 1.35 : 1);
+      const chainDamage = damage * (0.3 + P.chain * 0.04) * (this.evolves.evoStorm ? 1.2 : 1);
       let from = primary;
       for (let jump = 0; jump < chainJumps; jump++) {
         let target = null, best = chainRange * chainRange;
@@ -2635,10 +2964,13 @@ export class SurvivorGame {
       enemy.deadTime = 0;
       enemy.anim.play('death', { once:true, clamp:true });
       this.kills++;
+      if (enemy.isElite) this._eliteKills = (this._eliteKills || 0) + 1;
+      this.trackObjectiveKill(enemy);
       this.spawnGem(enemy.root.position, enemy.gem);
       this.maybeSpawnPotion(enemy);
       if (enemy.isBoss) {
         const wave = enemy.bossWave || 1;
+        this.bossKills++;
         const attrReward = 1 + Math.floor((wave - 1) / 3);
         this.spawnGem(enemy.root.position, Math.max(12, Math.round(enemy.gem * 0.5)));
         this.attrPoints += attrReward;
@@ -2649,6 +2981,9 @@ export class SurvivorGame {
         this.toast(`${enemy.bossIcon || '★'} Hạ ${enemy.bossName || 'Boss'}! +${attrReward} điểm${skillHint}`);
         this.flashEvent(`${enemy.bossIcon || '★'} Boss đợt ${wave} bị đánh bại! +${attrReward} điểm`, 3.8);
         this.grantXp(14 + wave * 6);
+        if (enemy.isFinalBoss && this.runMode === 'standard') {
+          this.victory();
+        }
       }
     }
   }
@@ -2767,6 +3102,7 @@ export class SurvivorGame {
     pickup.collected = true;
     this.releaseGem(pickup);
     this.gems += pickup.value;
+    this.trackObjectiveGems(pickup.value);
     this.grantXp(pickup.value * (this.power.luckXp || 1));
   }
 
@@ -2839,15 +3175,20 @@ export class SurvivorGame {
 
   /** Thẻ góc màn hình: icon + tên + 1–2 dòng stat EN. */
   renderUpgradeCard(card, index) {
-    const kind = card.kind === 'risk' ? 'risk' : card.kind === 'attr' ? 'attr' : '';
-    const levelLabel = card.kind === 'attr'
-      ? 'ATTR'
-      : card.kind === 'risk'
-        ? 'RISK'
-        : `Lv ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
+    const kindClass = card.kind === 'risk' || card.kind === 'mutation' ? 'risk'
+      : card.kind === 'attr' ? 'attr'
+      : card.kind === 'evolve' ? 'evolve'
+      : card.kind === 'sidearm' ? 'sidearm'
+      : '';
+    const levelLabel = card.kind === 'attr' ? 'ATTR'
+      : card.kind === 'risk' ? 'RISK'
+      : card.kind === 'mutation' ? 'MUT'
+      : card.kind === 'evolve' ? 'EVO'
+      : card.kind === 'sidearm' ? `W2 ${(this.power.sidearm || 0) + 1}/${card.max}`
+      : `Lv ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
     const stats = (card.stats || []).slice(0, 2);
     const statsHtml = stats.map(line => `<span class="stat">${line}</span>`).join('');
-    return `<button class="dock-card ${kind}" data-card="${index}" type="button">
+    return `<button class="dock-card ${kindClass}" data-card="${index}" type="button">
       <span class="dock-icon" aria-hidden="true">${card.icon}</span>
       <span class="dock-body">
         <span class="card-name">${card.name}</span>
@@ -2868,13 +3209,25 @@ export class SurvivorGame {
       this.updateAttrBadge();
       this.renderAttrRows();
       this.toast('◎ +1 điểm thuộc tính');
+    } else if (card.kind === 'sidearm') {
+      this.upgradeLevels.sidearm = (this.upgradeLevels.sidearm || 0) + 1;
+      card.apply(this);
+      this.toast(`${card.icon} ${card.name} cấp ${this.power.sidearm}`);
     } else {
       this.upgradeLevels[card.id] = (this.upgradeLevels[card.id] || 0) + 1;
       card.apply(this);
-      this.checkSynergies();
-      this.toast(card.kind === 'risk'
-        ? `${card.icon} ${card.name}`
-        : `${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
+      if (card.kind === 'evolve') {
+        if (this.evolveTokens > 0) this.evolveTokens--;
+        this.flashEvent(`${card.icon} Tiến hóa: ${card.name}`, 3.4);
+        this.toast(`${card.icon} ${card.name}`);
+      } else if (card.kind === 'mutation') {
+        this.toast(`${card.icon} Biến dị: ${card.name}`);
+      } else {
+        this.checkSynergies();
+        this.toast(card.kind === 'risk'
+          ? `${card.icon} ${card.name}`
+          : `${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
+      }
     }
     this.pendingLevels = Math.max(0, this.pendingLevels - 1);
     if (this.pendingLevels > 0) this.showLevelUp();
@@ -2899,35 +3252,122 @@ export class SurvivorGame {
     }
   }
 
+  evolveCount() {
+    return Object.keys(this.evolves || {}).filter(k => this.evolves[k]).length;
+  }
+
+  awardStars({ victory }) {
+    const seconds = Math.floor(this.elapsed);
+    const gained = computeRunStars({
+      victory:!!victory,
+      seconds,
+      kills:this.kills,
+      bossKills:this.bossKills || 0,
+      evolveCount:this.evolveCount(),
+      level:this.level,
+      mode:this.runMode,
+    });
+    const total = loadStars() + gained;
+    saveStars(total);
+    return { gained, total, seconds };
+  }
+
+  showEndModal({ victory, title, blurb, stars }) {
+    const best = Math.max(stars.seconds, Number(localStorage.getItem('cute3d.survivor.bestTime') || 0));
+    localStorage.setItem('cute3d.survivor.bestTime', String(best));
+    localStorage.setItem('cute3d.survivor.bestKills', String(Math.max(this.kills, Number(localStorage.getItem('cute3d.survivor.bestKills') || 0))));
+    const meta = loadMeta();
+    this.ui.modal.innerHTML = `
+      <div class="box">
+        <h1>${title}</h1>
+        <p>${blurb}</p>
+        <div class="summary">
+          <span>⏱ ${this.formatTime(stars.seconds)}</span>
+          <span>☠ ${this.kills} quái</span>
+          <span>⬆ Cấp ${this.level}</span>
+          <span>✦ ${this.evolveCount()} tiến hóa</span>
+          <span>★ +${stars.gained} (tổng ${stars.total})</span>
+          <span>Mode ${this.runMode === 'endless' ? 'Endless' : 'Chuẩn'}</span>
+        </div>
+        <div class="meta-shop">
+          <small>Đổi sao meta (vĩnh viễn)</small>
+          <div class="actions">
+            <button type="button" id="buyDmg" class="alt">+3% ATK (5★)</button>
+            <button type="button" id="buyXp" class="alt">+4% XP (5★)</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="restart">Chơi lại</button>
+          ${victory && this.runMode === 'standard' ? '<button id="goEndless" class="alt">Endless tiếp</button>' : ''}
+          <a class="alt" href="index.html">Về sảnh</a>
+        </div>
+      </div>`;
+    this.ui.modal.classList.remove('hidden');
+    this.ui.modal.querySelector('#restart').onclick = () => this.restart();
+    const goEndless = this.ui.modal.querySelector('#goEndless');
+    if (goEndless) {
+      goEndless.onclick = () => {
+        setSavedMode('endless');
+        this.runMode = 'endless';
+        this.restart();
+      };
+    }
+    const buy = (key, cost) => {
+      let total = loadStars();
+      if (total < cost) { this.toast('Không đủ sao'); return; }
+      total -= cost;
+      saveStars(total);
+      meta[key] = (meta[key] || 0) + 1;
+      saveMeta(meta);
+      this.toast(`Đã mua · còn ${total}★`);
+      const starSpan = [...this.ui.modal.querySelectorAll('.summary span')].find(s => s.textContent.includes('tổng'));
+      if (starSpan) starSpan.textContent = `★ +${stars.gained} (tổng ${total})`;
+    };
+    this.ui.modal.querySelector('#buyDmg').onclick = () => buy('dmgRanks', 5);
+    this.ui.modal.querySelector('#buyXp').onclick = () => buy('xpRanks', 5);
+    bindLobbyLinks(this.ui.modal);
+  }
+
+  victory() {
+    if (this.state === 'over' || this.victoryPending) return;
+    this.victoryPending = true;
+    this.state = 'over';
+    this.needsRender = true;
+    this.hideLevelUpDock();
+    this.objective = null;
+    this.renderObjectiveHud();
+    const stars = this.awardStars({ victory:true });
+    this.flashEvent('CHIẾN THẮNG — Boss cuối đã ngã!', 4);
+    setTimeout(() => {
+      if (this.state !== 'over') return;
+      this.showEndModal({
+        victory:true,
+        title:'Chiến thắng!',
+        blurb:'Bạn đã hạ boss cuối ở phút 10. Đổi sao meta hoặc thử Endless.',
+        stars,
+      });
+    }, 700);
+  }
+
   gameOver() {
     if (this.state === 'over') return;
     this.state = 'over';
     this.needsRender = true;
     this.hideLevelUpDock();
+    this.objective = null;
+    this.renderObjectiveHud();
     this.hero.dead = true;
     this.hero.hp = 0;
     this.hero.anim.play('death', { once:true, clamp:true });
-    const seconds = Math.floor(this.elapsed);
-    const best = Math.max(seconds, Number(localStorage.getItem('cute3d.survivor.bestTime') || 0));
-    localStorage.setItem('cute3d.survivor.bestTime', String(best));
-    localStorage.setItem('cute3d.survivor.bestKills', String(Math.max(this.kills, Number(localStorage.getItem('cute3d.survivor.bestKills') || 0))));
+    const stars = this.awardStars({ victory:false });
     setTimeout(() => {
       if (this.state !== 'over') return;
-      this.ui.modal.innerHTML = `
-        <div class="box">
-          <h1>Trận đấu kết thúc</h1>
-          <p>Đàn quái đã áp đảo anh hùng.</p>
-          <div class="summary">
-            <span>⏱ ${this.formatTime(seconds)}</span>
-            <span>☠ ${this.kills} quái</span>
-            <span>⬆ Cấp ${this.level}</span>
-            <span>★ Kỷ lục ${this.formatTime(best)}</span>
-          </div>
-          <div class="actions"><button id="restart">Chơi lại</button><a class="alt" href="index.html">Về sảnh</a></div>
-        </div>`;
-      this.ui.modal.classList.remove('hidden');
-      this.ui.modal.querySelector('#restart').onclick = () => this.restart();
-      bindLobbyLinks(this.ui.modal);
+      this.showEndModal({
+        victory:false,
+        title:'Trận đấu kết thúc',
+        blurb:'Đàn quái đã áp đảo anh hùng — vẫn nhận sao theo thành tích.',
+        stars,
+      });
     }, 650);
   }
 
@@ -2983,9 +3423,10 @@ export class SurvivorGame {
       cache.seconds = seconds;
       this.ui.timer.textContent = this.formatTime(seconds);
     }
-    const stageLabel = this.elapsed >= RING_START_AT
+    let stageLabel = this.elapsed >= RING_START_AT
       ? `VÒNG ${Math.round(this.arenaRadius)}`
-      : `MÀN ${this.stageIndex + 1}`;
+      : (this.runMode === 'endless' ? `∞ M${this.stageIndex + 1}` : `MÀN ${this.stageIndex + 1}`);
+    if (this.runMode === 'standard' && this.finalBossSpawned) stageLabel = 'BOSS CUỐI';
     if (cache.stageLabel !== stageLabel) {
       cache.stageLabel = stageLabel;
       this.ui.stage.textContent = stageLabel;
@@ -3108,6 +3549,14 @@ export class SurvivorGame {
     this.introRemaining = 0;
     this.ui.enemyIntro?.classList.add('hidden');
     for (const projectile of this.projectiles || []) this.removeProjectile(projectile);
+    for (const shot of this.sidearmProjectiles || []) {
+      this.scene?.remove(shot.mesh);
+      shot.mesh?.geometry?.dispose();
+      shot.mesh?.material?.dispose();
+    }
+    this.sidearmProjectiles = [];
+    this.objective = null;
+    this.renderObjectiveHud();
     for (const pickup of this.pickups || []) this.releaseGem(pickup);
     for (const drop of this.fieldDrops || []) {
       this.scene?.remove(drop.mesh);
