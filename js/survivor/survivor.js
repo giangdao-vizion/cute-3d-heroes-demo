@@ -128,53 +128,130 @@ function makeDiamondTexture(color, accent) {
   return texture;
 }
 
+/** Bình máu kiểu RPG — silhouette chai rõ (nút bần to + cổ dày + bầu đỏ + ♥). */
 function makePotionTexture() {
-  const S = 128;
+  const S = 256;
   const canvas = document.createElement('canvas');
   canvas.width = S;
   canvas.height = S;
   const ctx = canvas.getContext('2d');
+  const cx = 128;
 
-  const glow = ctx.createRadialGradient(64, 110, 2, 64, 110, 36);
-  glow.addColorStop(0, 'rgba(255,90,122,0.35)');
-  glow.addColorStop(1, 'rgba(255,90,122,0)');
+  // Hào quang đỏ dưới chân.
+  const glow = ctx.createRadialGradient(cx, 228, 6, cx, 228, 72);
+  glow.addColorStop(0, 'rgba(239,68,68,0.6)');
+  glow.addColorStop(0.5, 'rgba(239,68,68,0.2)');
+  glow.addColorStop(1, 'rgba(239,68,68,0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.ellipse(64, 112, 34, 14, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, 230, 64, 22, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Flask body
-  const body = ctx.createLinearGradient(40, 40, 90, 110);
-  body.addColorStop(0, '#ffd0da');
-  body.addColorStop(0.45, '#ff5a7a');
-  body.addColorStop(1, '#c81e4a');
-  ctx.fillStyle = body;
+  // Bầu bình (pear / round-flask) — phần lớn nhất, đỏ đậm.
+  const bulbGrad = ctx.createLinearGradient(60, 100, 200, 220);
+  bulbGrad.addColorStop(0, '#ffe4ea');
+  bulbGrad.addColorStop(0.3, '#ff6b81');
+  bulbGrad.addColorStop(0.65, '#e11d48');
+  bulbGrad.addColorStop(1, '#9f1239');
   ctx.beginPath();
-  ctx.moveTo(44, 52);
-  ctx.quadraticCurveTo(40, 100, 64, 112);
-  ctx.quadraticCurveTo(88, 100, 84, 52);
+  // Vai chai → bầu tròn dưới.
+  ctx.moveTo(98, 108);
+  ctx.bezierCurveTo(62, 118, 48, 160, 58, 190);
+  ctx.bezierCurveTo(68, 220, 188, 220, 198, 190);
+  ctx.bezierCurveTo(208, 160, 194, 118, 158, 108);
   ctx.closePath();
+  ctx.fillStyle = bulbGrad;
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 5;
   ctx.stroke();
 
-  // Neck + cork
-  ctx.fillStyle = '#ff7a93';
-  ctx.fillRect(56, 34, 16, 22);
-  ctx.fillStyle = '#b45309';
-  ctx.fillRect(54, 26, 20, 12);
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  // Mặt nước.
   ctx.beginPath();
-  ctx.ellipse(56, 72, 6, 10, -0.4, 0, Math.PI * 2);
+  ctx.ellipse(cx, 118, 42, 12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,200,210,0.5)';
   ctx.fill();
+
+  // Cổ chai DÀY — nhìn rõ từ xa, không lẫn quả bóng.
+  const neckGrad = ctx.createLinearGradient(108, 40, 148, 120);
+  neckGrad.addColorStop(0, '#fecdd3');
+  neckGrad.addColorStop(0.45, '#fb7185');
+  neckGrad.addColorStop(1, '#be123c');
+  ctx.fillStyle = neckGrad;
+  ctx.beginPath();
+  ctx.moveTo(110, 112);
+  ctx.lineTo(110, 52);
+  ctx.quadraticCurveTo(110, 42, 128, 42);
+  ctx.quadraticCurveTo(146, 42, 146, 52);
+  ctx.lineTo(146, 112);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // Vai (shoulder) nối cổ–bầu.
+  ctx.beginPath();
+  ctx.moveTo(98, 108);
+  ctx.quadraticCurveTo(128, 100, 158, 108);
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Nút bần TO, nâu vàng — điểm nhận diện chai thuốc.
+  const corkGrad = ctx.createLinearGradient(100, 18, 156, 48);
+  corkGrad.addColorStop(0, '#fcd34d');
+  corkGrad.addColorStop(0.4, '#d97706');
+  corkGrad.addColorStop(1, '#78350f');
+  ctx.fillStyle = corkGrad;
+  ctx.beginPath();
+  ctx.roundRect(102, 16, 52, 30, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(110, 28); ctx.lineTo(146, 28);
+  ctx.moveTo(110, 36); ctx.lineTo(146, 36);
+  ctx.stroke();
+
+  // Highlight thủy tinh.
+  ctx.beginPath();
+  ctx.ellipse(84, 155, 11, 28, -0.4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(92, 130, 5, 10, -0.35, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.fill();
+
+  // Trái tim trắng lớn.
+  ctx.save();
+  ctx.translate(cx, 160);
+  ctx.scale(1.45, 1.35);
+  ctx.beginPath();
+  ctx.moveTo(0, 12);
+  ctx.bezierCurveTo(-20, -2, -20, -20, -9, -20);
+  ctx.bezierCurveTo(-3, -20, 0, -13, 0, -13);
+  ctx.bezierCurveTo(0, -13, 3, -20, 9, -20);
+  ctx.bezierCurveTo(20, -20, 20, -2, 0, 12);
+  ctx.closePath();
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 28px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('+', 64, 82);
+  ctx.shadowColor = 'rgba(127,29,29,0.5)';
+  ctx.shadowBlur = 8;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.ellipse(cx - 7, 148, 4, 3, -0.4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fill();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
   return texture;
 }
 
@@ -211,11 +288,13 @@ function createGemMesh(tier) {
   return sprite;
 }
 
-function createPotionMesh() {
+function createPotionMesh(scale = 1.45) {
   const sprite = new THREE.Sprite(getPotionMaterial());
-  sprite.scale.set(0.85, 0.95, 1);
+  // Cao hơn rộng — giữ tỉ lệ chai đứng, dễ nhận trên sân.
+  sprite.scale.set(scale * 0.9, scale * 1.35, 1);
   sprite.center.set(0.5, 0.05);
   sprite.userData.sharedPickup = true;
+  sprite.userData.potionScale = scale;
   return sprite;
 }
 
@@ -230,6 +309,15 @@ function disposeSharedPickups() {
     SHARED_PICKUPS.potionMat.dispose();
     SHARED_PICKUPS.potionMat = null;
   }
+}
+
+/** Field-drop cleanup — bỏ qua SpriteMaterial/texture dùng chung. */
+function disposeFieldDropVisual(mesh) {
+  mesh?.traverse(obj => {
+    if (obj.isSprite || obj.userData?.sharedPickup) return;
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) obj.material.dispose();
+  });
 }
 
 /** Chỉ số cơ bản — cộng bằng điểm thuộc tính trong bảng nhân vật. */
@@ -330,7 +418,7 @@ const BOSS_EVENTS = [
 
 const FIELD_DROPS = [
   { id:'fieldAttr', icon:'◎', color:0xa78bfa, name:'Điểm thuộc tính', apply:g => { g.attrPoints++; g.updateAttrBadge(); g.renderAttrRows(); } },
-  { id:'fieldHeal', icon:'♥', color:0x22c55e, name:'Hồi máu', apply:g => { g.hero.hp = Math.min(g.hero.maxHp, g.hero.hp + Math.round(g.hero.maxHp * 0.28)); } },
+  { id:'fieldHeal', icon:'🧪', color:0xef4444, name:'Bình máu', apply:g => { g.hero.hp = Math.min(g.hero.maxHp, g.hero.hp + Math.round(g.hero.maxHp * 0.28)); } },
   { id:'fieldXp', icon:'✦', color:0xfbbf24, name:'Bùng nổ XP', apply:g => { g.grantXp(14); } },
   { id:'fieldShield', icon:'⛨', color:0x60a5fa, name:'Khiên tạm', apply:g => { g.hero.invulnerable = Math.max(g.hero.invulnerable, 2.4); } },
   { id:'fieldRage', icon:'⚔', color:0xef4444, name:'Nộ chiến', apply:g => { g.tempBuffs.damage = { t:9, mult:1.4 }; } },
@@ -1193,9 +1281,12 @@ export class SurvivorGame {
     for (const drop of this.fieldDrops) {
       drop.life -= dt;
       drop.phase += dt * 3.2;
-      drop.mesh.rotation.y += dt * 2.4;
+      // Sprite bình máu tự billboard — chỉ nhún, không xoay group.
+      if (!drop.isPotion) drop.mesh.rotation.y += dt * 2.4;
       drop.mesh.position.y = 0.55 + Math.sin(drop.phase) * 0.12;
-      drop.halo.material.opacity = 0.35 + Math.sin(drop.phase * 1.4) * 0.2;
+      if (drop.halo?.material) {
+        drop.halo.material.opacity = 0.35 + Math.sin(drop.phase * 1.4) * 0.2;
+      }
       if (drop.life < 4) drop.mesh.scale.setScalar(0.75 + Math.sin(drop.phase * 8) * 0.12);
       const dx = drop.mesh.position.x - this.hero.root.position.x;
       const dz = drop.mesh.position.z - this.hero.root.position.z;
@@ -1212,10 +1303,7 @@ export class SurvivorGame {
     for (const drop of this.fieldDrops) {
       if (!drop.dead) continue;
       this.scene.remove(drop.mesh);
-      drop.mesh.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
-      });
+      disposeFieldDropVisual(drop.mesh);
     }
     this.fieldDrops = this.fieldDrops.filter(drop => !drop.dead);
   }
@@ -1229,16 +1317,32 @@ export class SurvivorGame {
     }
     const life = 15 + Math.random() * 15;
     const group = new THREE.Group();
-    const core = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.38, 0),
-      new THREE.MeshBasicMaterial({ color:def.color, toneMapped:false })
-    );
-    const halo = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.68, 28),
-      new THREE.MeshBasicMaterial({ color:def.color, transparent:true, opacity:0.5, depthWrite:false, side:THREE.DoubleSide })
-    );
+    let halo = null;
+    if (def.id === 'fieldHeal') {
+      // Dùng chung sprite bình máu — nhận diện ngay, không còn khối lục diện xanh.
+      const potion = createPotionMesh(1.65);
+      potion.position.y = 0.18;
+      group.add(potion);
+      halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.55, 0.78, 28),
+        new THREE.MeshBasicMaterial({
+          color:0xef4444, transparent:true, opacity:0.55, depthWrite:false, side:THREE.DoubleSide,
+        })
+      );
+    } else {
+      const core = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.38, 0),
+        new THREE.MeshBasicMaterial({ color:def.color, toneMapped:false })
+      );
+      group.add(core);
+      halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.5, 0.68, 28),
+        new THREE.MeshBasicMaterial({
+          color:def.color, transparent:true, opacity:0.5, depthWrite:false, side:THREE.DoubleSide,
+        })
+      );
+    }
     halo.rotation.x = -Math.PI / 2;
-    group.add(core);
     group.add(halo);
     let placed = false;
     for (let i = 0; i < 20; i++) {
@@ -1257,7 +1361,11 @@ export class SurvivorGame {
       group.position.set(Math.cos(a) * (this.arenaRadius * 0.55), 0.55, Math.sin(a) * (this.arenaRadius * 0.55));
     }
     this.scene.add(group);
-    this.fieldDrops.push({ mesh:group, halo, def, life, phase:Math.random() * 6, dead:false });
+    this.fieldDrops.push({
+      mesh:group, halo, def, life,
+      phase:Math.random() * 6, dead:false,
+      isPotion: def.id === 'fieldHeal',
+    });
     this.flashEvent(`${def.icon} Phần thưởng xuất hiện trên bản đồ!`, 2.8);
   }
 
@@ -1851,11 +1959,12 @@ export class SurvivorGame {
       this.gemPool.set(key, pool);
     }
     let mesh = pool.pop();
-    if (!mesh) mesh = createPotionMesh();
+    if (!mesh) mesh = createPotionMesh(1.45);
     mesh.visible = true;
     mesh.position.copy(position);
-    mesh.position.y = 0.12;
-    mesh.scale.set(0.85, 0.95, 1);
+    mesh.position.y = 0.16;
+    const s = mesh.userData.potionScale || 1.45;
+    mesh.scale.set(s * 0.9, s * 1.35, 1);
     this.scene.add(mesh);
     this.pickups.push({ kind:'potion', mesh, healPct, poolKey:key, age:0, collected:false });
   }
@@ -1871,7 +1980,7 @@ export class SurvivorGame {
       const magnet = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
       if (distanceSq < magnet * magnet) {
         const distance = Math.sqrt(distanceSq) || 0.001;
-        const y = pickup.kind === 'potion' ? 0.12 : 0.28;
+        const y = pickup.kind === 'potion' ? 0.14 : 0.28;
         pickup.mesh.position.lerp(tmp2.set(heroPos.x, y, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
       }
       if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectPickup(pickup);
@@ -2182,10 +2291,7 @@ export class SurvivorGame {
     for (const pickup of this.pickups || []) this.releaseGem(pickup);
     for (const drop of this.fieldDrops || []) {
       this.scene?.remove(drop.mesh);
-      drop.mesh?.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
-      });
+      disposeFieldDropVisual(drop.mesh);
     }
     this.fieldDrops = [];
     this.ui.eventBanner?.classList.add('hidden');
