@@ -9,20 +9,25 @@ const ui = {
 };
 
 let renderer;
-let gallery;
 let game;
 let defense;
 let clock;
 let mode = 'home';
-let galleryLoaded = false;
 let selectedMode = 'defense';
 let initializing;
+const HERO_META = {
+  Knight: { icon: '🛡️', style: 'Cân bằng', range: 'Cận chiến' },
+  Barbarian: { icon: '🪓', style: 'Sát thương cao', range: 'Cận chiến' },
+  Mage: { icon: '🔮', style: 'Phép thuật', range: 'Đánh xa' },
+  Rogue: { icon: '🗡️', style: 'Tốc độ cao', range: 'Cận chiến' },
+  Rogue_Hooded: { icon: '🏹', style: 'Linh hoạt', range: 'Đánh xa' },
+};
 
 function resize() {
   if (!renderer) return;
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
-  gallery.resize(w, h); game.resize(w, h); defense.resize(w, h);
+  game.resize(w, h); defense.resize(w, h);
 }
 addEventListener('resize', resize);
 
@@ -32,12 +37,17 @@ function syncHome() {
     button.classList.toggle('on', on);
     button.setAttribute('aria-pressed', String(on));
   });
+  const hero = byId[selection.hero] || byId.Knight;
+  const meta = HERO_META[hero.id] || HERO_META.Knight;
+  $('selectedHeroAvatar').textContent = meta.icon;
+  $('selectedHeroName').textContent = hero.name;
+  $('selectedHeroStats').innerHTML = `<span>${meta.style}</span><span>${meta.range}</span><span>HP ${hero.stats.hp}</span>`;
   document.querySelectorAll('[data-mode]').forEach(button => {
     const on = button.dataset.mode === selectedMode;
     button.classList.toggle('on', on);
     button.setAttribute('aria-pressed', String(on));
   });
-  const labels = { game: 'Đấu trường', defense: 'Giữ cổng', survivor: 'Sinh tồn', gallery: 'Showroom' };
+  const labels = { game: 'Đấu trường', defense: 'Giữ cổng', survivor: 'Sinh tồn' };
   $('startAdventure').innerHTML = `Chơi ${labels[selectedMode]} <span aria-hidden="true">→</span>`;
 }
 
@@ -47,6 +57,10 @@ document.querySelectorAll('[data-hero]').forEach(button => {
     saveSelection();
     syncHome();
   };
+});
+$('openHeroPicker').onclick = () => $('heroSheet').classList.remove('hidden');
+document.querySelectorAll('[data-close-heroes]').forEach(button => {
+  button.onclick = () => $('heroSheet').classList.add('hidden');
 });
 document.querySelectorAll('[data-mode]').forEach(button => {
   button.onclick = () => {
@@ -65,48 +79,27 @@ async function ensure3D() {
     const [
       THREE,
       { makeRenderer },
-      { Gallery },
       { Game },
       { Defense },
     ] = await Promise.all([
       import('three'),
       import('./engine.js'),
-      import('./gallery.js'),
       import('./game.js'),
       import('./defense.js'),
     ]);
     renderer = makeRenderer($('c'));
-    gallery = new Gallery(renderer, ui);
     game = new Game(renderer, ui);
     defense = new Defense(renderer, ui);
     defense.onExit = () => setMode('home');
 
-    // Thêm lối chơi nhanh từ showroom sau khi người dùng đã chủ động tải showroom.
-    const origRender = gallery.renderPanel.bind(gallery);
-    gallery.renderPanel = () => {
-      origRender();
-      const arenaButton = document.createElement('button');
-      arenaButton.id = 'play';
-      arenaButton.textContent = '⚔️ Vào Đấu trường với lựa chọn này';
-      arenaButton.onclick = () => setMode('game');
-      const defenseButton = document.createElement('button');
-      defenseButton.id = 'play';
-      defenseButton.style.background = '#2563eb';
-      defenseButton.textContent = '🛡️ Chơi Giữ cổng';
-      defenseButton.onclick = () => setMode('defense');
-      ui.panel.appendChild(defenseButton);
-      ui.panel.appendChild(arenaButton);
-    };
-
     clock = new THREE.Clock();
     renderer.setAnimationLoop(() => {
       const dt = Math.min(clock.getDelta(), 0.1);
-      if (mode === 'gallery') { gallery.update(dt); gallery.render(); }
-      else if (mode === 'defense') { defense.update(dt); defense.render(); }
+      if (mode === 'defense') { defense.update(dt); defense.render(); }
       else if (mode === 'game') { game.update(dt); game.render(); }
     });
     resize();
-    window.__app = { gallery, game, defense, setMode };
+    window.__app = { game, defense, setMode };
   })();
   return initializing;
 }
@@ -120,7 +113,6 @@ function stopActiveMode() {
   if (!renderer) return;
   game.stop();
   defense.stop();
-  gallery.hide();
   ui.panel.classList.add('hidden');
   ui.hud.classList.add('hidden');
   ui.overlay.classList.add('hidden');
@@ -151,20 +143,9 @@ async function setMode(nextMode) {
     stopActiveMode();
     mode = nextMode;
     showAppChrome(true);
-    $('tabGallery').classList.toggle('on', nextMode === 'gallery');
     $('tabGame').classList.toggle('on', nextMode === 'game');
     $('tabDefense').classList.toggle('on', nextMode === 'defense');
-    if (nextMode === 'gallery') {
-      ui.panel.classList.remove('hidden');
-      if (!galleryLoaded) {
-        await gallery.load((done, total) => {
-          $('loadBar').style.width = `${Math.max(16, done / total * 100)}%`;
-          $('loadText').textContent = `${done} / ${total} model`;
-        });
-        galleryLoaded = true;
-      }
-      gallery.show();
-    } else if (nextMode === 'defense') {
+    if (nextMode === 'defense') {
       await defense.open();
       resize();
     } else {
@@ -181,7 +162,6 @@ async function setMode(nextMode) {
 
 $('startAdventure').onclick = () => setMode(selectedMode);
 $('tabHome').onclick = () => setMode('home');
-$('tabGallery').onclick = () => setMode('gallery');
 $('tabGame').onclick = () => setMode('game');
 $('tabDefense').onclick = () => setMode('defense');
 $('tabSurvivor').onclick = () => setMode('survivor');
