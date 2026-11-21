@@ -418,7 +418,7 @@ const BOSS_EVENTS = [
 
 const FIELD_DROPS = [
   { id:'fieldAttr', icon:'◎', color:0xa78bfa, name:'Điểm thuộc tính', apply:g => { g.attrPoints++; g.updateAttrBadge(); g.renderAttrRows(); } },
-  { id:'fieldHeal', icon:'🧪', color:0xef4444, name:'Bình máu', apply:g => { g.hero.hp = Math.min(g.hero.maxHp, g.hero.hp + Math.round(g.hero.maxHp * 0.28)); } },
+  { id:'fieldHeal', icon:'🧪', color:0xef4444, name:'Bình máu', apply:g => { g.grantHealthPotion(Math.round(g.hero.maxHp * 0.28)); } },
   { id:'fieldXp', icon:'✦', color:0xfbbf24, name:'Bùng nổ XP', apply:g => { g.grantXp(14); } },
   { id:'fieldShield', icon:'⛨', color:0x60a5fa, name:'Khiên tạm', apply:g => { g.hero.invulnerable = Math.max(g.hero.invulnerable, 2.4); } },
   { id:'fieldRage', icon:'⚔', color:0xef4444, name:'Nộ chiến', apply:g => { g.tempBuffs.damage = { t:9, mult:1.4 }; } },
@@ -1292,7 +1292,8 @@ export class SurvivorGame {
       const dz = drop.mesh.position.z - this.hero.root.position.z;
       if (dx * dx + dz * dz < (this.hero.radius + 0.7) ** 2) {
         drop.def.apply(this);
-        this.toast(`${drop.def.icon} ${drop.def.name}`);
+        // fieldHeal đã toast qua grantHealthPotion — tránh báo trùng.
+        if (drop.def.id !== 'fieldHeal') this.toast(`${drop.def.icon} ${drop.def.name}`);
         this.flashEvent(`${drop.def.icon} Nhặt được: ${drop.def.name}`, 2.4);
         drop.dead = true;
         this.updateHud();
@@ -2015,10 +2016,24 @@ export class SurvivorGame {
     pickup.collected = true;
     this.releaseGem(pickup);
     const heal = Math.max(12, Math.round(this.hero.maxHp * (pickup.healPct || 0.18)));
-    const before = this.hero.hp;
-    this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + heal);
-    const gained = Math.round(this.hero.hp - before);
-    if (gained > 0) this.toast(`♥ +${gained} máu`);
+    this.grantHealthPotion(heal);
+  }
+
+  /** Hồi máu; nếu đã đầy thì +1 giới hạn máu (baseMaxHp) thay vì bỏ phí. */
+  grantHealthPotion(healAmount) {
+    const hero = this.hero;
+    if (!hero) return;
+    if (hero.hp >= hero.maxHp - 0.001) {
+      hero.baseMaxHp += 1;
+      hero.maxHp += 1;
+      hero.hp = hero.maxHp;
+      this.toast('♥ +1 giới hạn máu');
+    } else {
+      const before = hero.hp;
+      hero.hp = Math.min(hero.maxHp, hero.hp + Math.max(1, healAmount));
+      const gained = Math.round(hero.hp - before);
+      if (gained > 0) this.toast(`♥ +${gained} máu`);
+    }
     this.updateHud();
   }
 
