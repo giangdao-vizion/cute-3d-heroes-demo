@@ -63,6 +63,7 @@ const SPECIAL_UPGRADES = [
   { id:'chain', icon:'ϟ', name:'Sét lan', desc:'Tia sét lan thêm 1 quái gần đó', max:4, apply:g => { g.power.chain++; } },
   { id:'blast', icon:'✹', name:'Nổ lan', desc:'Fireball gây nổ quanh mục tiêu', max:4, apply:g => { g.power.blast++; } },
   { id:'freeze', icon:'❄', name:'Băng giá', desc:'Làm chậm, có cơ hội đóng băng quái', max:4, apply:g => { g.power.freeze++; } },
+  { id:'burnAura', icon:'🔥', name:'Vòng lửa', desc:'Thiêu đốt quái đi vào vòng quanh bạn', max:5, apply:g => { g.power.burnAura++; g.updateBurnAura(); } },
 ];
 
 /** Thẻ rủi ro: mạnh hơn nhưng có đánh đổi. */
@@ -110,6 +111,10 @@ const SYNERGY_DEFS = [
   {
     id:'shrapnel', requires:['pierce','blast'], icon:'➤✹',
     name:'Mảnh nổ', desc:'Mỗi lần xuyên kích hoạt nổ nhỏ',
+  },
+  {
+    id:'frostburn', requires:['freeze','burnAura'], icon:'❄🔥',
+    name:'Băng lửa', desc:'Vòng lửa cũng làm chậm quái',
   },
 ];
 
@@ -269,7 +274,8 @@ export class SurvivorGame {
     this.upgradeLevels = {};
     this.attrPoints = 0;
     this.attrs = { str:0, agi:0, vit:0, def:0 };
-    this.synergies = { frostBurst:false, stormVolley:false, shrapnel:false };
+    this.synergies = { frostBurst:false, stormVolley:false, shrapnel:false, frostburn:false };
+    this.burnTick = 0;
     this.bossSpawned = {};
     this.arenaRadius = ARENA;
     this.ringDamageClock = 0;
@@ -280,7 +286,7 @@ export class SurvivorGame {
     this.power = {
       damage:1, damageBonus:1, interval:0.72, multi:1, pierce:0, size:1,
       magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
-      chain:0, blast:0, freeze:0, takenDamageMult:1,
+      chain:0, blast:0, freeze:0, burnAura:0, takenDamageMult:1,
     };
 
     const heroEntry = byId[selection.hero] || byId.Knight;
@@ -297,6 +303,7 @@ export class SurvivorGame {
     this.recalcAttributes();
     this.updateRangeRing();
     this.updateMagnetRing();
+    this.updateBurnAura();
     this.renderAttrRows();
     this.updateAttrBadge();
 
@@ -482,6 +489,98 @@ export class SurvivorGame {
     this.hero.magnetRing = magnetRing;
   }
 
+  burnAuraRadius() {
+    const level = this.power.burnAura || 0;
+    if (level <= 0) return 0;
+    return 1.55 + level * 0.42;
+  }
+
+  burnAuraDps() {
+    const level = this.power.burnAura || 0;
+    if (level <= 0) return 0;
+    return (5.5 + level * 2.8) * this.power.damage * (this.tempBuffs.damage?.mult || 1);
+  }
+
+  clearBurnAura() {
+    if (!this.hero?.burnRings) return;
+    for (const ring of this.hero.burnRings) {
+      this.hero.root.remove(ring);
+      ring.geometry.dispose();
+      ring.material.dispose();
+    }
+    this.hero.burnRings = [];
+  }
+
+  updateBurnAura() {
+    if (!this.hero) return;
+    this.clearBurnAura();
+    const level = this.power.burnAura || 0;
+    if (level <= 0) return;
+    const radius = this.burnAuraRadius();
+    const rings = [];
+    const count = Math.min(3, 1 + Math.floor((level - 1) / 2));
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 1 : i / (count - 1);
+      const r = radius * (0.42 + t * 0.58);
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(Math.max(0.08, r - 0.07), r + 0.07, 48),
+        new THREE.MeshBasicMaterial({
+          color:i === count - 1 ? 0xff6b2d : 0xffb347,
+          transparent:true,
+          opacity:0.22 + t * 0.28,
+          depthWrite:false,
+          blending:THREE.AdditiveBlending,
+        })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.05 + i * 0.012;
+      this.hero.root.add(ring);
+      rings.push(ring);
+    }
+    // Soft fill disk so the burn zone reads clearly on mobile.
+    const fill = new THREE.Mesh(
+      new THREE.CircleGeometry(radius, 40),
+      new THREE.MeshBasicMaterial({
+        color:0xff4d1a, transparent:true, opacity:0.1, depthWrite:false, blending:THREE.AdditiveBlending,
+      })
+    );
+    fill.rotation.x = -Math.PI / 2;
+    fill.position.y = 0.03;
+    this.hero.root.add(fill);
+    rings.push(fill);
+    this.hero.burnRings = rings;
+  }
+
+  updateBurnAuraCombat(dt) {
+    const level = this.power.burnAura || 0;
+    if (level <= 0 || !this.hero) return;
+    if (this.hero.burnRings?.length) {
+      const pulse = 0.92 + Math.sin(this.elapsed * 5.5) * 0.08;
+      for (const ring of this.hero.burnRings) {
+        if (ring.geometry?.type === 'CircleGeometry') ring.material.opacity = 0.08 + Math.sin(this.elapsed * 4) * 0.04;
+        else ring.scale.setScalar(pulse);
+      }
+    }
+    this.burnTick -= dt;
+    if (this.burnTick > 0) return;
+    this.burnTick = 0.22;
+    const radius = this.burnAuraRadius();
+    const radiusSq = radius * radius;
+    const damage = this.burnAuraDps() * 0.22;
+    const heroPos = this.hero.root.position;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const dx = enemy.root.position.x - heroPos.x;
+      const dz = enemy.root.position.z - heroPos.z;
+      if (dx * dx + dz * dz > radiusSq) continue;
+      this.hitEnemy(enemy, damage);
+      if (this.synergies.frostburn) {
+        enemy.slowT = Math.max(enemy.slowT, 0.55);
+        enemy.slowFactor = Math.min(enemy.slowFactor, 0.72);
+      }
+    }
+  }
+
   updateCameraFov() {
     if (!this.camera || !this.power) return;
     const baseFov = innerHeight > innerWidth ? 50 : 45;
@@ -562,6 +661,7 @@ export class SurvivorGame {
       this.elapsed += dt;
       this.updateTempBuffs(dt);
       this.updateHero(dt);
+      this.updateBurnAuraCombat(dt);
       this.updateSpawner(dt);
       this.updateBossEvents();
       this.updateSafeRing(dt);
@@ -1787,6 +1887,14 @@ export class SurvivorGame {
       unit.root.remove(unit.magnetRing);
       unit.magnetRing.geometry.dispose();
       unit.magnetRing.material.dispose();
+    }
+    if (unit.burnRings?.length) {
+      for (const ring of unit.burnRings) {
+        unit.root.remove(ring);
+        ring.geometry.dispose();
+        ring.material.dispose();
+      }
+      unit.burnRings = [];
     }
     const skeletons = new Set();
     unit.model?.traverse(object => {
