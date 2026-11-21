@@ -38,74 +38,198 @@ const STAGES = [
 ];
 
 const GEM_TIERS = [
-  { min:10, color:0xffe066, accent:0xfff6c2, size:0.36 },
-  { min:6, color:0xff4d6d, accent:0xffb3c1, size:0.31 },
-  { min:3, color:0x38bdf8, accent:0xbae6fd, size:0.27 },
-  { min:1, color:0xa78bfa, accent:0xddd6fe, size:0.23 },
+  { min:10, color:0xffe066, accent:0xfff6c2, size:0.55 },
+  { min:6, color:0xff4d6d, accent:0xffb3c1, size:0.48 },
+  { min:3, color:0x38bdf8, accent:0xbae6fd, size:0.42 },
+  { min:1, color:0xa78bfa, accent:0xddd6fe, size:0.36 },
 ];
 
-/** Kim cương low-poly đứng yên — không xoay mỗi frame. */
-function createGemMesh(tier) {
-  const group = new THREE.Group();
-  const bodyMat = new THREE.MeshBasicMaterial({ color:tier.color, toneMapped:false });
-  const accentMat = new THREE.MeshBasicMaterial({ color:tier.accent, toneMapped:false });
-  const s = tier.size;
+/** Shared GPU assets: one texture/material per gem tier, reused by every drop. */
+const SHARED_PICKUPS = {
+  gemMats: new Map(),
+  potionMat: null,
+};
 
-  // Thân octahedron kéo dài = dáng kim cương 3D.
-  const body = new THREE.Mesh(new THREE.OctahedronGeometry(s, 0), bodyMat);
-  body.scale.set(0.92, 1.55, 0.92);
-  body.castShadow = false;
-  body.receiveShadow = false;
-
-  // Mặt bàn trên (table) — hình thoi.
-  const table = new THREE.Mesh(
-    new THREE.CylinderGeometry(s * 0.38, s * 0.58, s * 0.26, 4),
-    accentMat
-  );
-  table.position.y = s * 0.52;
-  table.rotation.y = Math.PI / 4;
-  table.castShadow = false;
-
-  // Đai giữa (girdle) cho rõ cạnh cắt.
-  const girdle = new THREE.Mesh(
-    new THREE.CylinderGeometry(s * 0.62, s * 0.62, s * 0.07, 4),
-    accentMat
-  );
-  girdle.position.y = s * 0.18;
-  girdle.rotation.y = Math.PI / 4;
-  girdle.castShadow = false;
-
-  group.add(body, table, girdle);
-  group.rotation.y = 0.55;
-  group.userData.pickupMats = [bodyMat, accentMat];
-  group.userData.pickupGeos = [body.geometry, table.geometry, girdle.geometry];
-  return group;
+function cssHex(hex) {
+  return `#${(hex >>> 0).toString(16).padStart(6, '0')}`;
 }
 
-/** Bình máu đứng yên — nhặt để hồi HP. */
+function mixHex(a, b, t) {
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+
+function fillPoly(ctx, points, fill) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
+function strokePoly(ctx, points, stroke, width = 2) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = width;
+  ctx.stroke();
+}
+
+/** Vẽ kim cương kiểu SVG/facet rồi cache thành texture dùng chung. */
+function makeDiamondTexture(color, accent) {
+  const S = 160;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const main = cssHex(color);
+  const light = cssHex(accent);
+  const dark = cssHex(mixHex(color, 0x000000, 0.38));
+  const mid = cssHex(mixHex(color, accent, 0.28));
+  const deep = cssHex(mixHex(color, 0x000000, 0.55));
+
+  // Bóng dưới cho cảm giác đặt trên sàn.
+  const glow = ctx.createRadialGradient(80, 132, 2, 80, 132, 46);
+  glow.addColorStop(0, `${main}66`);
+  glow.addColorStop(1, `${main}00`);
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(80, 134, 42, 16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Các mặt cắt (facet) — nhìn như kim cương 3D phẳng đẹp.
+  fillPoly(ctx, [[80, 12], [118, 48], [80, 68], [42, 48]], light);           // table / top
+  fillPoly(ctx, [[80, 12], [42, 48], [28, 66], [80, 68]], dark);            // upper left
+  fillPoly(ctx, [[80, 12], [118, 48], [132, 66], [80, 68]], mid);           // upper right
+  fillPoly(ctx, [[28, 66], [80, 68], [80, 148]], deep);                    // pavilion left
+  fillPoly(ctx, [[132, 66], [80, 68], [80, 148]], dark);                   // pavilion right
+  fillPoly(ctx, [[42, 48], [80, 68], [118, 48]], `${light}cc`);            // crown highlight
+  fillPoly(ctx, [[64, 40], [80, 28], [96, 40], [80, 54]], '#ffffffaa');    // sparkle
+
+  strokePoly(ctx, [[80, 12], [118, 48], [132, 66], [80, 148], [28, 66], [42, 48]], 'rgba(255,255,255,0.65)', 2.4);
+  ctx.beginPath();
+  ctx.moveTo(80, 12); ctx.lineTo(80, 148);
+  ctx.moveTo(28, 66); ctx.lineTo(132, 66);
+  ctx.moveTo(42, 48); ctx.lineTo(80, 68); ctx.lineTo(118, 48);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function makePotionTexture() {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+
+  const glow = ctx.createRadialGradient(64, 110, 2, 64, 110, 36);
+  glow.addColorStop(0, 'rgba(255,90,122,0.35)');
+  glow.addColorStop(1, 'rgba(255,90,122,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(64, 112, 34, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Flask body
+  const body = ctx.createLinearGradient(40, 40, 90, 110);
+  body.addColorStop(0, '#ffd0da');
+  body.addColorStop(0.45, '#ff5a7a');
+  body.addColorStop(1, '#c81e4a');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(44, 52);
+  ctx.quadraticCurveTo(40, 100, 64, 112);
+  ctx.quadraticCurveTo(88, 100, 84, 52);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Neck + cork
+  ctx.fillStyle = '#ff7a93';
+  ctx.fillRect(56, 34, 16, 22);
+  ctx.fillStyle = '#b45309';
+  ctx.fillRect(54, 26, 20, 12);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(56, 72, 6, 10, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('+', 64, 82);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function getGemMaterial(tier) {
+  const key = tier.color;
+  let mat = SHARED_PICKUPS.gemMats.get(key);
+  if (mat) return mat;
+  mat = new THREE.SpriteMaterial({
+    map: makeDiamondTexture(tier.color, tier.accent),
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  SHARED_PICKUPS.gemMats.set(key, mat);
+  return mat;
+}
+
+function getPotionMaterial() {
+  if (SHARED_PICKUPS.potionMat) return SHARED_PICKUPS.potionMat;
+  SHARED_PICKUPS.potionMat = new THREE.SpriteMaterial({
+    map: makePotionTexture(),
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  return SHARED_PICKUPS.potionMat;
+}
+
+function createGemMesh(tier) {
+  const sprite = new THREE.Sprite(getGemMaterial(tier));
+  sprite.scale.set(tier.size * 1.85, tier.size * 2.25, 1);
+  sprite.center.set(0.5, 0.08);
+  sprite.userData.sharedPickup = true;
+  return sprite;
+}
+
 function createPotionMesh() {
-  const group = new THREE.Group();
-  const glass = new THREE.MeshBasicMaterial({ color:0xff5a7a, toneMapped:false });
-  const shine = new THREE.MeshBasicMaterial({ color:0xffd0da, toneMapped:false });
-  const cork = new THREE.MeshBasicMaterial({ color:0xb45309, toneMapped:false });
+  const sprite = new THREE.Sprite(getPotionMaterial());
+  sprite.scale.set(0.85, 0.95, 1);
+  sprite.center.set(0.5, 0.05);
+  sprite.userData.sharedPickup = true;
+  return sprite;
+}
 
-  const flask = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.38, 8), glass);
-  flask.position.y = 0.22;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.14, 6), glass);
-  neck.position.y = 0.46;
-  const bub = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), shine);
-  bub.position.set(0.05, 0.26, 0.08);
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.07, 6), cork);
-  top.position.y = 0.56;
-
-  for (const mesh of [flask, neck, bub, top]) {
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-    group.add(mesh);
+function disposeSharedPickups() {
+  for (const mat of SHARED_PICKUPS.gemMats.values()) {
+    mat.map?.dispose();
+    mat.dispose();
   }
-  group.userData.pickupMats = [glass, shine, cork];
-  group.userData.pickupGeos = [flask.geometry, neck.geometry, bub.geometry, top.geometry];
-  return group;
+  SHARED_PICKUPS.gemMats.clear();
+  if (SHARED_PICKUPS.potionMat) {
+    SHARED_PICKUPS.potionMat.map?.dispose();
+    SHARED_PICKUPS.potionMat.dispose();
+    SHARED_PICKUPS.potionMat = null;
+  }
 }
 
 /** Chỉ số cơ bản — cộng bằng điểm thuộc tính trong bảng nhân vật. */
@@ -705,6 +829,8 @@ export class SurvivorGame {
     enemy.slowT = 0;
     enemy.slowFactor = 1;
     enemy.paralyzeT = 0;
+    enemy.vx = 0;
+    enemy.vz = 0;
     enemy.isElite = variantId === 'sproutBrute' || variantId === 'skeletonGuard' || variantId === 'skeletonRaider';
     const heroPos = this.hero?.root.position || tmp.set(0,0,0);
     let placed = false;
@@ -1039,6 +1165,8 @@ export class SurvivorGame {
     enemy.slowT = 0;
     enemy.slowFactor = 1;
     enemy.paralyzeT = 0;
+    enemy.vx = 0;
+    enemy.vz = 0;
     enemy.bossCd = 2.5;
     enemy.telegraphT = 0;
     enemy.chargeT = 0;
@@ -1486,7 +1614,7 @@ export class SurvivorGame {
       let dx = heroPos.x - pos.x;
       let dz = heroPos.z - pos.z;
       let distance = Math.max(0.001, Math.hypot(dx, dz));
-      // Separation as velocity (× dt). Instant position shoves looked like diagonal stutter.
+      // Soft separation + velocity lerp — tránh giật khi đám đông chen nhau.
       let sepX = 0;
       let sepZ = 0;
 
@@ -1499,7 +1627,7 @@ export class SurvivorGame {
             const ox = pos.x - other.root.position.x;
             const oz = pos.z - other.root.position.z;
             const odSq = ox * ox + oz * oz;
-            const minimum = (enemy.radius + other.radius) * 0.72;
+            const minimum = (enemy.radius + other.radius) * 0.62;
             if (odSq > 1e-6 && odSq < minimum * minimum) {
               const od = Math.sqrt(odSq);
               const push = (minimum - od) / od;
@@ -1510,11 +1638,21 @@ export class SurvivorGame {
         }
       }
 
+      const sepLen = Math.hypot(sepX, sepZ);
+      const sepCap = enemy.speed * 1.15;
+      if (sepLen > sepCap) {
+        const s = sepCap / sepLen;
+        sepX *= s;
+        sepZ *= s;
+      }
+
       const moveScale = enemy.paralyzeT > 0 ? 0 : enemy.slowT > 0 ? enemy.slowFactor : 1;
       if (enemy.isBoss) {
         enemy.bossCd = Math.max(0, (enemy.bossCd || 0) - dt);
         if (enemy.telegraphT > 0) {
           enemy.telegraphT -= dt;
+          enemy.vx = 0;
+          enemy.vz = 0;
           enemy.anim.play('idle');
           enemy.ring.material.color.setHex(0xfde047);
           if (enemy.telegraphT <= 0) {
@@ -1524,9 +1662,11 @@ export class SurvivorGame {
           }
         } else if (enemy.chargeT > 0) {
           enemy.chargeT -= dt;
-          pos.x += enemy.chargeDir.x * enemy.speed * 2.8 * dt;
-          pos.z += enemy.chargeDir.z * enemy.speed * 2.8 * dt;
-          this.faceTo(enemy, pos.x + enemy.chargeDir.x, pos.z + enemy.chargeDir.z, dt, 14);
+          enemy.vx = enemy.chargeDir.x * enemy.speed * 2.8;
+          enemy.vz = enemy.chargeDir.z * enemy.speed * 2.8;
+          pos.x += enemy.vx * dt;
+          pos.z += enemy.vz * dt;
+          this.faceTo(enemy, pos.x + enemy.chargeDir.x, pos.z + enemy.chargeDir.z, dt, 12);
           enemy.anim.play('run');
           enemy.ring.material.color.setHex(0xef4444);
         } else if (enemy.bossCd <= 0 && moveScale > 0) {
@@ -1536,12 +1676,16 @@ export class SurvivorGame {
       if (!(enemy.isBoss && (enemy.telegraphT > 0 || enemy.chargeT > 0))) {
         const seekX = dx / distance * enemy.speed * moveScale;
         const seekZ = dz / distance * enemy.speed * moveScale;
-        const moveX = seekX + sepX * (enemy.isBoss ? 1.2 : 3.4);
-        const moveZ = seekZ + sepZ * (enemy.isBoss ? 1.2 : 3.4);
-        pos.x += moveX * dt;
-        pos.z += moveZ * dt;
-        if (moveX * moveX + moveZ * moveZ > 0.04) this.faceTo(enemy, pos.x + moveX, pos.z + moveZ, dt, 10);
-        else this.faceTo(enemy, heroPos.x, heroPos.z, dt, 8);
+        const wantX = seekX + sepX * (enemy.isBoss ? 0.85 : 1.8);
+        const wantZ = seekZ + sepZ * (enemy.isBoss ? 0.85 : 1.8);
+        const blend = 1 - Math.exp(-10 * dt);
+        enemy.vx = (enemy.vx || 0) + (wantX - (enemy.vx || 0)) * blend;
+        enemy.vz = (enemy.vz || 0) + (wantZ - (enemy.vz || 0)) * blend;
+        pos.x += enemy.vx * dt;
+        pos.z += enemy.vz * dt;
+        const speedSq = enemy.vx * enemy.vx + enemy.vz * enemy.vz;
+        if (speedSq > 0.04) this.faceTo(enemy, pos.x + enemy.vx, pos.z + enemy.vz, dt, 7);
+        else this.faceTo(enemy, heroPos.x, heroPos.z, dt, 6);
         enemy.anim.play(moveScale > 0 ? 'run' : 'idle');
       }
       if (pos.length() > this.arenaRadius - 0.6) pos.setLength(this.arenaRadius - 0.6);
@@ -1692,8 +1836,9 @@ export class SurvivorGame {
     if (!mesh) mesh = createGemMesh(tier);
     mesh.visible = true;
     mesh.position.copy(position);
-    mesh.position.y = 0.42;
-    mesh.scale.setScalar(1);
+    mesh.position.y = 0.28;
+    // Sprite scale = kích thước pixel trên thế giới (shared material, không clone).
+    mesh.scale.set(tier.size * 1.85, tier.size * 2.25, 1);
     this.scene.add(mesh);
     this.pickups.push({ kind:'gem', mesh, value, tier, poolKey:key, age:0, collected:false });
   }
@@ -1709,8 +1854,8 @@ export class SurvivorGame {
     if (!mesh) mesh = createPotionMesh();
     mesh.visible = true;
     mesh.position.copy(position);
-    mesh.position.y = 0.08;
-    mesh.scale.setScalar(1);
+    mesh.position.y = 0.12;
+    mesh.scale.set(0.85, 0.95, 1);
     this.scene.add(mesh);
     this.pickups.push({ kind:'potion', mesh, healPct, poolKey:key, age:0, collected:false });
   }
@@ -1719,14 +1864,14 @@ export class SurvivorGame {
     const heroPos = this.hero.root.position;
     for (const pickup of this.pickups) {
       pickup.age += dt;
-      // Đứng yên — chỉ dịch chuyển khi bị nam châm hút.
+      // Sprite billboard — chỉ hút nam châm, không xoay mesh.
       const dx = pickup.mesh.position.x - heroPos.x;
       const dz = pickup.mesh.position.z - heroPos.z;
       const distanceSq = dx * dx + dz * dz;
       const magnet = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
       if (distanceSq < magnet * magnet) {
         const distance = Math.sqrt(distanceSq) || 0.001;
-        const y = pickup.kind === 'potion' ? 0.08 : 0.42;
+        const y = pickup.kind === 'potion' ? 0.12 : 0.28;
         pickup.mesh.position.lerp(tmp2.set(heroPos.x, y, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
       }
       if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectPickup(pickup);
@@ -1740,10 +1885,7 @@ export class SurvivorGame {
     pickup.mesh.visible = false;
     const pool = this.gemPool?.get(pickup.poolKey);
     if (pool) pool.push(pickup.mesh);
-    else {
-      for (const geometry of pickup.mesh.userData.pickupGeos || pickup.mesh.userData.gemGeos || []) geometry.dispose();
-      for (const material of pickup.mesh.userData.pickupMats || pickup.mesh.userData.gemMats || []) material.dispose();
-    }
+    // Shared SpriteMaterial/texture — không dispose theo từng instance.
   }
 
   collectPickup(pickup) {
@@ -2047,13 +2189,8 @@ export class SurvivorGame {
     }
     this.fieldDrops = [];
     this.ui.eventBanner?.classList.add('hidden');
-    for (const pool of this.gemPool?.values?.() || []) {
-      for (const mesh of pool) {
-        for (const geometry of mesh.userData?.pickupGeos || mesh.userData?.gemGeos || []) geometry.dispose();
-        for (const material of mesh.userData?.pickupMats || mesh.userData?.gemMats || []) material.dispose();
-      }
-    }
     this.gemPool?.clear?.();
+    disposeSharedPickups();
     for (const effect of this.combatEffects || []) {
       this.scene.remove(effect.mesh);
       effect.mesh.geometry.dispose();
