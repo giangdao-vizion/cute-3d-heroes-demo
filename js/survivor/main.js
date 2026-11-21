@@ -43,28 +43,22 @@ const ui = {
 const game = new SurvivorGame(renderer, ui);
 
 function viewportSize() {
-  const vv = window.visualViewport;
-  return {
-    width: Math.max(1, Math.round(vv?.width ?? innerWidth)),
-    height: Math.max(1, Math.round(vv?.height ?? innerHeight)),
-    top: Math.max(0, Math.round(vv?.offsetTop ?? 0)),
-    left: Math.max(0, Math.round(vv?.offsetLeft ?? 0)),
-  };
+  const canvas = $('c');
+  // Lấy kích thước canvas đang phủ full màn (CSS inset:0) — không co theo visualViewport.
+  const width = Math.max(1, Math.round(canvas?.clientWidth || window.visualViewport?.width || innerWidth));
+  const height = Math.max(1, Math.round(canvas?.clientHeight || window.visualViewport?.height || innerHeight));
+  return { width, height };
 }
 
 function resize() {
-  const { width, height, top, left } = viewportSize();
-  const root = document.documentElement;
-  root.style.setProperty('--app-height', `${height}px`);
-  root.style.setProperty('--app-width', `${width}px`);
-  root.style.setProperty('--app-top', `${top}px`);
-  root.style.setProperty('--app-left', `${left}px`);
+  const { width, height } = viewportSize();
+  document.documentElement.style.setProperty('--app-height', `${height}px`);
   const canvas = $('c');
-  // Không dùng inset/bottom — chỉ top/left + size theo visualViewport (tránh dải nền dưới trên iPhone).
-  canvas.style.top = `${top}px`;
-  canvas.style.left = `${left}px`;
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
+  // Để CSS (inset:0 + 100%) phủ full màn; chỉ set buffer vẽ.
+  canvas.style.width = '';
+  canvas.style.height = '';
+  canvas.style.top = '';
+  canvas.style.left = '';
   renderer.setSize(width, height, false);
   game.resize(width, height);
 }

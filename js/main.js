@@ -41,8 +41,10 @@ function openSurvivorArena() {
   $('loading').classList.add('hidden');
   const frame = ensureSurvivorFrame();
   frame.classList.remove('hidden');
-  if (!frame.src || !frame.src.endsWith('survivor-arena.html')) {
-    frame.src = 'survivor-arena.html';
+  // Cache-bust cố định — buộc iPhone/Pages tải bản arena mới (hết dải nền xanh).
+  const arenaUrl = 'survivor-arena.html?v=groundfill1';
+  if (!frame.src || !frame.src.includes('v=groundfill1')) {
+    frame.src = arenaUrl;
   }
   if (location.hash !== '#survivor') history.replaceState(null, '', '#survivor');
 }

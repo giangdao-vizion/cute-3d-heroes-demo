@@ -827,9 +827,10 @@ export class SurvivorGame {
 
     const scene = this.scene = new THREE.Scene();
     const mobile = isMobileGraphics();
-    scene.background = new THREE.Color(0x9fd8ff);
+    // Nền/fog cùng màu cỏ — mép frustum dưới không lộ xanh trời.
+    scene.background = new THREE.Color(0x98d77d);
     // Fog is fill-rate heavy on phones; keep a shorter band or skip it.
-    scene.fog = mobile ? null : new THREE.Fog(0x9fd8ff, 28, 62);
+    scene.fog = mobile ? null : new THREE.Fog(0x98d77d, 32, 70);
     this.camera = new THREE.PerspectiveCamera(innerHeight > innerWidth ? 50 : 45, innerWidth / innerHeight, 0.1, 160);
     this.sun = addLights(scene, 24);
     this.buildArena();
@@ -931,6 +932,15 @@ export class SurvivorGame {
     const mobile = isMobileGraphics();
     const segs = mobile ? 48 : 72;
     const FloorMat = mobile ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
+    // Đĩa cỏ rất lớn dưới sân — camera nghiêng không nhìn thấy “khoảng trống” dưới đáy màn.
+    const underlay = new THREE.Mesh(
+      new THREE.CircleGeometry(ARENA + 80, mobile ? 32 : 48),
+      new THREE.MeshBasicMaterial({ color:0x98d77d })
+    );
+    underlay.rotation.x = -Math.PI / 2;
+    underlay.position.y = -0.02;
+    world.add(underlay);
+
     const grass = new THREE.Mesh(
       new THREE.CircleGeometry(ARENA + 11, segs),
       new FloorMat({ color:0x79c968 })

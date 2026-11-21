@@ -21,16 +21,9 @@
   // iPhone / iframe: 100dvh thường cao hơn visualViewport → lộ nền xanh dưới đáy.
   (function syncAppHeight() {
     const apply = () => {
-      const vv = window.visualViewport;
-      const height = Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight);
-      const width = Math.round(vv?.width || window.innerWidth || document.documentElement.clientWidth);
-      const top = Math.round(vv?.offsetTop || 0);
-      const left = Math.round(vv?.offsetLeft || 0);
-      const root = document.documentElement;
-      root.style.setProperty('--app-height', height + 'px');
-      root.style.setProperty('--app-width', width + 'px');
-      root.style.setProperty('--app-top', top + 'px');
-      root.style.setProperty('--app-left', left + 'px');
+      // Chỉ dùng cho HUD/layout phụ — canvas luôn inset:0 phủ full màn.
+      const height = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
+      document.documentElement.style.setProperty('--app-height', height + 'px');
     };
     apply();
     window.addEventListener('resize', apply);
@@ -39,35 +32,34 @@
   })();
 </script>
 <style>
-  :root { --ink:#2b2340; --card:#fffaf2; --accent:#ff7a59; --purple:#7c3aed; --app-height:100dvh; --app-width:100vw; --app-top:0px; --app-left:0px; }
+  /* --ground: màu cỏ — mọi khe/safe-area lộ ra cũng không còn dải xanh trời. */
+  :root { --ink:#2b2340; --card:#fffaf2; --accent:#ff7a59; --purple:#7c3aed; --ground:#98d77d; --app-height:100dvh; }
   * { box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
-  /* Không đặt -webkit-fill-available sau --app-height: trên iOS nó ghi đè và lộ dải nền dưới canvas. */
+  html {
+    height:100%; height:100dvh; height:-webkit-fill-available;
+    background:var(--ground);
+  }
   html, body {
-    margin:0; width:var(--app-width, 100%); height:var(--app-height, 100dvh);
-    min-height:var(--app-height, 100dvh); overflow:hidden; background:#9fd8ff;
+    margin:0; width:100%; min-height:100%; min-height:100dvh; min-height:-webkit-fill-available;
+    overflow:hidden; background:var(--ground);
     font-family:'Baloo 2',system-ui,sans-serif; color:var(--ink); touch-action:none;
   }
-  body { position:fixed; top:var(--app-top, 0px); left:var(--app-left, 0px); right:auto; bottom:auto; }
+  /* Canvas phủ full màn (inset:0). Không co theo visualViewport — co sẽ lộ nền dưới đáy iPhone. */
+  body { position:fixed; inset:0; width:100%; height:100%; height:100dvh; height:-webkit-fill-available; background:var(--ground); }
   button, a { font:inherit; }
   canvas#c {
-    position:fixed; top:var(--app-top, 0px); left:var(--app-left, 0px); right:auto; bottom:auto;
-    width:var(--app-width, 100%); height:var(--app-height, 100dvh);
-    display:block; touch-action:none; background:#9fd8ff;
+    position:fixed; inset:0; width:100% !important; height:100% !important;
+    display:block; touch-action:none; background:var(--ground);
   }
   .hidden { display:none !important; }
-  #enemyLabels {
-    position:fixed; top:var(--app-top, 0px); left:var(--app-left, 0px); right:auto; bottom:auto;
-    width:var(--app-width, 100%); height:var(--app-height, 100dvh);
-    z-index:2; overflow:hidden; pointer-events:none;
-  }
+  #enemyLabels { position:fixed; inset:0; z-index:2; overflow:hidden; pointer-events:none; }
   .enemy-hp { position:absolute; left:0; top:0; width:54px; height:12px; overflow:hidden; border:1.5px solid rgba(255,255,255,.95); border-radius:99px; background:rgba(43,35,64,.78); box-shadow:0 2px 5px rgba(0,0,0,.25); transform:translate3d(-100px,-100px,0); will-change:transform; }
   .enemy-hp i { display:block; width:100%; height:100%; background:linear-gradient(90deg,#ef4444,#fb7185); transform-origin:left center; }
   .enemy-hp b { position:absolute; inset:0; display:grid; place-items:center; color:#fff; font:800 9px/1 'Baloo 2',system-ui; text-align:center; text-shadow:0 1px 2px #000; }
 
   #hud {
-    position:fixed; top:var(--app-top, 0px); left:var(--app-left, 0px); right:auto; bottom:auto;
-    width:var(--app-width, 100%); height:var(--app-height, 100dvh);
-    z-index:3; pointer-events:none; padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
+    position:fixed; inset:0; z-index:3; pointer-events:none;
+    padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
     color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.35);
   }
   .top { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:10px; right:10px; display:grid; grid-template-columns:minmax(100px,1fr) auto minmax(100px,1fr); align-items:start; gap:8px; }
@@ -140,10 +132,9 @@
   .dock-card.risk .card-lv { background:#ffedd5; color:#c2410c; }
   #attrBadge { position:absolute; left:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; z-index:1; }
   #attrSheet {
-    position:fixed; top:var(--app-top, 0px); left:var(--app-left, 0px); right:auto; bottom:auto;
-    width:var(--app-width, 100%); height:var(--app-height, 100dvh);
-    z-index:9; display:flex; align-items:flex-end; justify-content:center; padding:12px;
-    padding-bottom:calc(12px + env(safe-area-inset-bottom)); background:rgba(43,35,64,.45); touch-action:manipulation;
+    position:fixed; inset:0; z-index:9; display:flex; align-items:flex-end; justify-content:center;
+    padding:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom));
+    background:rgba(43,35,64,.45); touch-action:manipulation;
   }
   #attrSheet .sheet { width:min(440px,100%); max-height:min(84dvh,640px); overflow:auto; padding:16px 16px 18px; border-radius:24px 24px 18px 18px; background:var(--card); box-shadow:0 -12px 40px rgba(0,0,0,.28); }
   #attrSheet .sheet-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
@@ -176,12 +167,10 @@
   #stick { position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px; border-radius:50%; background:rgba(255,255,255,.86); box-shadow:0 3px 12px rgba(0,0,0,.25); }
 
   #modal, #loading {
-    position:fixed; top:var(--app-top, 0px); left:var(--app-left, 0px); right:auto; bottom:auto;
-    width:var(--app-width, 100%); height:var(--app-height, 100dvh);
-    z-index:8; display:flex; align-items:center; justify-content:center; padding:14px;
-    background:rgba(43,35,64,.5); touch-action:manipulation;
+    position:fixed; inset:0; z-index:8; display:flex; align-items:center; justify-content:center;
+    padding:14px; background:rgba(43,35,64,.5); touch-action:manipulation;
   }
-  #loading { z-index:10; flex-direction:column; background:#bfe6ff; font-size:23px; font-weight:800; }
+  #loading { z-index:10; flex-direction:column; background:var(--ground); font-size:23px; font-weight:800; }
   #loading .loadbar { width:min(300px,75vw); height:14px; margin-top:10px; border-radius:99px; background:#fff; overflow:hidden; }
   #loadFill { display:block; width:8%; height:100%; background:var(--accent); transition:width .25s; }
   #loadText { margin-top:5px; font-size:14px; }
