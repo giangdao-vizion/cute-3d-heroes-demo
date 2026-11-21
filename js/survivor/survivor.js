@@ -288,9 +288,9 @@ function createGemMesh(tier) {
   return sprite;
 }
 
-function createPotionMesh(scale = 1.45) {
+function createPotionMesh(scale = 0.72) {
   const sprite = new THREE.Sprite(getPotionMaterial());
-  // Cao hơn rộng — giữ tỉ lệ chai đứng, dễ nhận trên sân.
+  // Cao hơn rộng — giữ tỉ lệ chai đứng; mặc định ~50% kích thước cũ.
   sprite.scale.set(scale * 0.9, scale * 1.35, 1);
   sprite.center.set(0.5, 0.05);
   sprite.userData.sharedPickup = true;
@@ -967,10 +967,15 @@ export class SurvivorGame {
     }
     const shared = this.hero.orbitShared;
     if (shared) {
-      shared.orbGeo?.dispose();
-      shared.orbMat?.dispose();
+      shared.ringGeo?.dispose();
+      shared.ringMat?.dispose();
+      shared.glowGeo?.dispose();
+      shared.glowMat?.dispose();
       shared.coreGeo?.dispose();
       shared.coreMat?.dispose();
+      // Legacy keys from older torus/sphere version.
+      shared.orbGeo?.dispose();
+      shared.orbMat?.dispose();
     }
     this.hero.orbitGroup = null;
     this.hero.orbitOrbs = null;
@@ -988,38 +993,46 @@ export class SurvivorGame {
     const group = new THREE.Group();
     group.name = 'orbitSwirl';
 
-    // Vệt quỹ đạo mờ trên sàn — gợi phạm vi bay.
+    // Vệt quỹ đạo mỏng trên sàn.
     const path = new THREE.Mesh(
-      new THREE.RingGeometry(Math.max(0.12, radius - 0.08), radius + 0.08, 56),
+      new THREE.RingGeometry(Math.max(0.1, radius - 0.045), radius + 0.045, 64),
       new THREE.MeshBasicMaterial({
-        color:0x7dd3fc, transparent:true, opacity:0.22, depthWrite:false,
+        color:0x67e8f9, transparent:true, opacity:0.28, depthWrite:false,
         blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
       })
     );
     path.rotation.x = -Math.PI / 2;
-    path.position.y = 0.04;
+    path.position.y = 0.035;
     group.add(path);
 
-    // Một geometry/material dùng chung cho 3 vòng — tối ưu giống gem shared.
-    const orbGeo = new THREE.TorusGeometry(0.28, 0.09, 10, 22);
-    const orbMat = new THREE.MeshBasicMaterial({
-      color:0x38bdf8, transparent:true, opacity:0.92, depthWrite:false,
-      blending:THREE.AdditiveBlending,
+    // Ba vòng đứng (chakram) — đọc rõ là “vòng tròn” từ camera nghiêng.
+    const ringGeo = new THREE.RingGeometry(0.2, 0.34, 36);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color:0x22d3ee, transparent:true, opacity:0.95, depthWrite:false,
+      blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
     });
-    const coreGeo = new THREE.SphereGeometry(0.14, 12, 10);
+    const glowGeo = new THREE.RingGeometry(0.14, 0.4, 36);
+    const glowMat = new THREE.MeshBasicMaterial({
+      color:0xa5f3fc, transparent:true, opacity:0.28, depthWrite:false,
+      blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
+    });
+    const coreGeo = new THREE.CircleGeometry(0.11, 20);
     const coreMat = new THREE.MeshBasicMaterial({
-      color:0xe0f2fe, transparent:true, opacity:0.95, depthWrite:false,
-      blending:THREE.AdditiveBlending,
+      color:0xffffff, transparent:true, opacity:0.85, depthWrite:false,
+      blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
     });
 
     const orbs = [];
     for (let i = 0; i < 3; i++) {
       const pivot = new THREE.Group();
-      const torus = new THREE.Mesh(orbGeo, orbMat);
-      torus.rotation.x = Math.PI / 2;
+      const glow = new THREE.Mesh(glowGeo, glowMat);
+      const rim = new THREE.Mesh(ringGeo, ringMat);
       const core = new THREE.Mesh(coreGeo, coreMat);
-      pivot.add(torus, core);
-      pivot.position.y = 0.72;
+      // Đứng thẳng (mặt vòng nhìn ngang) rồi xoay theo quỹ đạo.
+      glow.rotation.y = Math.PI / 2;
+      rim.rotation.y = Math.PI / 2;
+      core.rotation.y = Math.PI / 2;
+      pivot.add(glow, rim, core);
       group.add(pivot);
       orbs.push(pivot);
     }
@@ -1028,7 +1041,7 @@ export class SurvivorGame {
     this.hero.orbitGroup = group;
     this.hero.orbitOrbs = orbs;
     this.hero.orbitPath = path;
-    this.hero.orbitShared = { orbGeo, orbMat, coreGeo, coreMat };
+    this.hero.orbitShared = { ringGeo, ringMat, glowGeo, glowMat, coreGeo, coreMat };
     this.syncOrbitPositions(this.orbitAngle || 0);
   }
 
@@ -1036,21 +1049,28 @@ export class SurvivorGame {
     const orbs = this.hero?.orbitOrbs;
     if (!orbs?.length) return;
     const radius = this.orbitRadius();
-    const spin = this.elapsed * 6;
+    const spin = this.elapsed * 7.5;
     for (let i = 0; i < orbs.length; i++) {
       const a = angle + (i * Math.PI * 2) / 3;
       const orb = orbs[i];
       orb.position.x = Math.cos(a) * radius;
       orb.position.z = Math.sin(a) * radius;
-      orb.position.y = 0.68 + Math.sin(spin + i * 1.7) * 0.08;
-      // Xoay cục bộ cho cảm giác “vòng xoáy”.
+      orb.position.y = 0.78 + Math.sin(spin * 0.55 + i * 2.1) * 0.1;
+      // Mặt vòng hướng theo tiếp tuyến quỹ đạo + tự xoay tạo cảm giác xoáy.
       orb.rotation.y = a + Math.PI / 2;
-      orb.children[0].rotation.z = spin * 1.4 + i;
+      orb.rotation.z = Math.sin(spin + i) * 0.35;
+      const rim = orb.children[1];
+      if (rim) rim.rotation.z = spin * 1.8 + i * 2.1;
+      const glow = orb.children[0];
+      if (glow) {
+        const pulse = 0.92 + Math.sin(spin * 1.3 + i) * 0.1;
+        glow.scale.setScalar(pulse);
+      }
     }
     if (this.hero.orbitPath) {
-      const pulse = 0.94 + Math.sin(this.elapsed * 4.2) * 0.06;
+      const pulse = 0.96 + Math.sin(this.elapsed * 3.8) * 0.04;
       this.hero.orbitPath.scale.set(pulse, pulse, pulse);
-      this.hero.orbitPath.material.opacity = 0.16 + Math.sin(this.elapsed * 3.5) * 0.06;
+      this.hero.orbitPath.material.opacity = 0.2 + Math.sin(this.elapsed * 3.2) * 0.08;
     }
   }
 
@@ -1575,13 +1595,13 @@ export class SurvivorGame {
     let halo = null;
     if (def.id === 'fieldHeal') {
       // Dùng chung sprite bình máu — nhận diện ngay, không còn khối lục diện xanh.
-      const potion = createPotionMesh(1.65);
-      potion.position.y = 0.18;
+      const potion = createPotionMesh(0.82);
+      potion.position.y = 0.1;
       group.add(potion);
       halo = new THREE.Mesh(
-        new THREE.RingGeometry(0.55, 0.78, 28),
+        new THREE.RingGeometry(0.32, 0.44, 28),
         new THREE.MeshBasicMaterial({
-          color:0xef4444, transparent:true, opacity:0.55, depthWrite:false, side:THREE.DoubleSide,
+          color:0xef4444, transparent:true, opacity:0.5, depthWrite:false, side:THREE.DoubleSide,
         })
       );
     } else {
@@ -2214,11 +2234,11 @@ export class SurvivorGame {
       this.gemPool.set(key, pool);
     }
     let mesh = pool.pop();
-    if (!mesh) mesh = createPotionMesh(1.45);
+    if (!mesh) mesh = createPotionMesh(0.72);
     mesh.visible = true;
     mesh.position.copy(position);
-    mesh.position.y = 0.16;
-    const s = mesh.userData.potionScale || 1.45;
+    mesh.position.y = 0.1;
+    const s = mesh.userData.potionScale || 0.72;
     mesh.scale.set(s * 0.9, s * 1.35, 1);
     this.scene.add(mesh);
     this.pickups.push({ kind:'potion', mesh, healPct, poolKey:key, age:0, collected:false });
@@ -2235,7 +2255,7 @@ export class SurvivorGame {
       const magnet = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
       if (distanceSq < magnet * magnet) {
         const distance = Math.sqrt(distanceSq) || 0.001;
-        const y = pickup.kind === 'potion' ? 0.14 : 0.28;
+        const y = pickup.kind === 'potion' ? 0.1 : 0.28;
         pickup.mesh.position.lerp(tmp2.set(heroPos.x, y, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
       }
       if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectPickup(pickup);
@@ -2545,10 +2565,14 @@ export class SurvivorGame {
       }
       const shared = unit.orbitShared;
       if (shared) {
-        shared.orbGeo?.dispose();
-        shared.orbMat?.dispose();
+        shared.ringGeo?.dispose();
+        shared.ringMat?.dispose();
+        shared.glowGeo?.dispose();
+        shared.glowMat?.dispose();
         shared.coreGeo?.dispose();
         shared.coreMat?.dispose();
+        shared.orbGeo?.dispose();
+        shared.orbMat?.dispose();
       }
       unit.orbitGroup = null;
       unit.orbitOrbs = null;
