@@ -35,11 +35,11 @@ Số máu chỉ hiện trên đầu quái sau phát trúng đầu tiên (giữ c
 
 ## Chỉ bắn trúng thứ đang thấy
 
-Quái, hòm, cổng phải đi vào vùng nhìn thấy (dưới thanh HUD phía trên) mới bị bắn trúng; đạn tắt khi tới mép đó. Mọi cú bắn trúng đều có tia sáng tại chỗ trúng. Đạn có lõi sáng, quầng sáng và vệt đuôi theo màu từng tướng.
+Quái, hòm, cổng phải đi vào vùng nhìn thấy (dưới thanh HUD phía trên) mới bị bắn trúng; đạn tắt khi tới mép đó. Mọi cú bắn trúng đều có tia sáng tại chỗ trúng. Đạn của tướng dùng model fireball emissive nhẹ; hiệu ứng va chạm vẫn giữ màu riêng của từng tướng.
 
 ## Các hệ thống
 
-- **Đạn theo tướng:** Hiệp sĩ chém sóng kiếm, Chiến binh ném rìu xoay, Pháp sư cầu tím, Sát thủ phi dao, Sát thủ trùm đầu bắn nỏ.
+- **Fireball dùng chung:** model GLB 56 tam giác, có lõi và đuôi cộng sáng, không dùng đèn động trên từng viên để giữ hiệu năng mobile.
 - **Đạn và hiệu ứng:** tối đa 5 tia tướng, 16 lính và 5 tia sét được render cùng lúc. Phần sức mạnh vượt ngưỡng được quy đổi thành sát thương để chỉ số tiếp tục tăng mà màn hình không bị phủ bởi projectile.
 - **Lính:** số lượng không hard-cap (hiện tối đa 16 model, phần dư cộng vào sát thương). Quái chạm vạch đỏ giết lính trước, hết lính mới trừ máu cổng.
 - **Hòm:** súng (+tia/+tốc/+sát thương/+xuyên), lính, máu cổng, bom, nộ.

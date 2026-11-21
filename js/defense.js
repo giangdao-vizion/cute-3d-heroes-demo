@@ -15,6 +15,9 @@ const MAX_VISIBLE_SHOTS = 5;     // sức mạnh có thể tăng vô hạn, như
 const MAX_VISIBLE_SOLDIERS = 16;
 const MAX_VISIBLE_LIGHTNING = 5;
 const META_KEY = 'cute3d.defense.meta.v1';
+const FIREBALL_ENTRY = { id: 'ember_projectile', file: 'models/props/ember_projectile.glb', height: 0.78 };
+const FIREBALL_FORWARD = new THREE.Vector3(0, 0, -1);
+const FIREBALL_UP = new THREE.Vector3(0, 1, 0);
 
 // Quái mở dần theo đợt. hp/spd là hệ số so với quái chuẩn.
 const ROSTER = [
@@ -252,6 +255,7 @@ export class Defense {
     this.hero.anim.play('attack', { speed: 1.2 });
     this.addRing(h.root, 0.5, 0x60a5fa);
     this.bulletStyle = BULLET_STYLE[hEntry.id] || 'orb';
+    await this.ensureFireballTemplate();
 
     // Lính: dùng các anh hùng còn lại, nhỏ hơn một chút.
     this.soldierEntries = CATALOG.filter(c => c.role === 'hero' && c.id !== hEntry.id);
@@ -617,6 +621,49 @@ export class Defense {
   }
 
   // ---------- Đạn ----------
+  async ensureFireballTemplate() {
+    if (this.fireballTemplate) return;
+    if (!this.fireballPromise) {
+      this.fireballPromise = spawnModel(FIREBALL_ENTRY, FIREBALL_ENTRY.height).then(({ root }) => {
+        root.traverse(object => {
+          if (!object.isMesh) return;
+          const materials = [].concat(object.material).map(material => {
+            const clone = material.clone();
+            clone.emissive?.set(0xff4d00);
+            if (clone.emissiveIntensity !== undefined) clone.emissiveIntensity = 2.2;
+            return clone;
+          });
+          object.material = Array.isArray(object.material) ? materials : materials[0];
+          object.castShadow = false;
+        });
+        for (const part of [
+          { radius:0.16, y:0.34, color:0xfff1a8, opacity:0.92 },
+          { radius:0.13, y:0.02, color:0xff8a1f, opacity:0.72 },
+          { radius:0.09, y:-0.20, color:0xef3b0a, opacity:0.5 },
+        ]) {
+          const mesh = new THREE.Mesh(
+            new THREE.SphereGeometry(part.radius, 8, 6),
+            new THREE.MeshBasicMaterial({
+              color:part.color, transparent:true, opacity:part.opacity,
+              depthWrite:false, blending:THREE.AdditiveBlending,
+            })
+          );
+          mesh.position.y = part.y;
+          root.add(mesh);
+        }
+        root.position.y = -FIREBALL_ENTRY.height * 0.5;
+        const template = new THREE.Group();
+        template.add(root);
+        this.fireballTemplate = template;
+      }).catch(error => {
+        console.warn('Không tải được model cầu lửa, dùng đạn mặc định.', error);
+        this.fireballTemplate = null;
+        this.fireballPromise = null;
+      });
+    }
+    await this.fireballPromise;
+  }
+
   fire(style, x, z, vx, dmg, pierce, crit) {
     const pool = this.bulletPool[style] || (this.bulletPool[style] = []);
     let mesh = pool.pop();
@@ -638,6 +685,20 @@ export class Defense {
     const S = BULLET_LOOK[style];
     const g = new THREE.Group();
     const add = (m) => { m.renderOrder = 5; g.add(m); return m; };
+    if (style !== 'soldier' && this.fireballTemplate) {
+      const visual = this.fireballTemplate.clone(true);
+      visual.quaternion.setFromUnitVectors(FIREBALL_UP, FIREBALL_FORWARD);
+      g.add(visual);
+      g.userData.core = visual;
+      g.userData.fireball = true;
+      const crit = add(new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex(), color:0xff4d2e, blending:THREE.AdditiveBlending,
+        depthWrite:false, transparent:true, toneMapped:false,
+      })));
+      crit.scale.setScalar(1.35);
+      g.userData.critGlow = crit;
+      return g;
+    }
     const coreGeo = {
       orb: () => new THREE.SphereGeometry(0.2, 12, 8), bolt: () => new THREE.BoxGeometry(0.12, 0.12, 0.7),
       slash: () => new THREE.TorusGeometry(0.42, 0.07, 6, 16, Math.PI), axe: () => new THREE.BoxGeometry(0.42, 0.08, 0.42),
@@ -668,7 +729,7 @@ export class Defense {
 
   updateBullets(dt) {
     for (const b of this.bullets) {
-      if (b.style === 'axe') b.mesh.userData.core.rotation.y += dt * 18;
+      if (b.style === 'axe' && !b.mesh.userData.fireball) b.mesh.userData.core.rotation.y += dt * 18;
       // Chia nhỏ bước di chuyển để đạn không bay xuyên qua quái khi máy giật.
       const steps = Math.ceil(Math.abs(b.vz * dt) / 0.4);
       for (let i = 0; i < steps && !b.dead; i++) this.stepBullet(b, dt / steps);

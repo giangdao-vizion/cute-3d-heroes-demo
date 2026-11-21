@@ -56,7 +56,8 @@ Trang game: `survivor-arena.html`.
 - Mục tiêu thắng: hạ boss cuối ở phút 10.
 - Người chơi có máu, không có cổng cần bảo vệ.
 - Quái chạm người chơi gây sát thương rồi bị đẩy lùi nhẹ; có 0,6 giây miễn nhiễm sau khi trúng đòn.
-- Ngọc kinh nghiệm nằm trên đất; sau 20 giây tự bay về gần người chơi để tránh rác vật thể.
+- Ngọc kinh nghiệm nằm trên đất; sau 45 giây chưa nhặt sẽ tự thu để tránh tích tụ vật thể.
+- Giá trị ngọc tăng theo độ mạnh của quái: tím → kim cương xanh → hồng ngọc → hoàng kim. Vòng tím quanh tướng luôn biểu thị đúng bán kính hút hiện tại.
 - Lên cấp tạm dừng game và hiện 3 thẻ. Đây là điểm nghỉ giúp người mới đọc lựa chọn.
 - Hòm rơi từ quái tinh anh và boss, cho hồi máu hoặc nâng ngẫu nhiên một kỹ năng đang sở hữu.
 - Thua khi máu về 0; thắng khi boss cuối bị hạ.
@@ -144,7 +145,7 @@ Mỗi loại quái phải tạo một vấn đề khác nhau:
 Không sinh quái ngay trong vùng an toàn quanh người chơi hoặc trong vùng camera đang nhìn thấy quá gần.
 Mỗi loại hoặc biến thể mới được mở theo màn 50 giây, kèm thẻ giới thiệu 5 giây ở góc màn hình với tên, máu, giáp và tốc độ.
 
-Đòn đánh thường chỉ khóa hướng khi mục tiêu nằm trong tầm bắn. Đạn bay thẳng với độ cong nhỏ, không tiếp tục truy đuổi mục tiêu và biến mất khi đi hết tầm. Tầm bắn khởi đầu phải nằm trong vùng quan sát mobile và chỉ tăng qua thẻ nâng cấp.
+Đòn đánh thường chỉ khóa hướng khi mục tiêu nằm trong tầm bắn. Đạn bay thẳng với độ cong nhỏ, không tiếp tục truy đuổi mục tiêu và biến mất khi đi hết tầm. Tầm bắn khởi đầu phải nằm trong vùng quan sát mobile và chỉ tăng qua thẻ nâng cấp; camera tăng FOV tương ứng để toàn bộ tầm bắn mới vẫn hữu ích.
 
 ### Boss
 

@@ -6,6 +6,7 @@ import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower } from 
 const ARENA = 27;
 const ENEMY_CAP = 55;
 const STAGE_DURATION = 50;
+const BASE_ATTACK_RANGE = 6.2;
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -17,10 +18,10 @@ const FIREBALL_ENTRY = {
 
 const ENEMY_VARIANTS = {
   sprout: { entryId:'Enemy', name:'Mầm xanh', icon:'🌱', hp:24, defense:0, speed:1.75, dmg:4, scale:1, gem:1 },
-  sproutBrute: { entryId:'Enemy', name:'Mầm xanh lực sĩ', icon:'🌿', hp:58, defense:2, speed:1.42, dmg:7, scale:1.38, gem:2 },
-  ratScout: { entryId:'Rat', name:'Chuột trinh sát', icon:'🐭', hp:28, defense:0, speed:3.15, dmg:5, scale:1.04, gem:1 },
-  skeletonGuard: { entryId:'Skeleton_Minion', name:'Vệ binh xương', icon:'💀', hp:72, defense:3, speed:1.82, dmg:8, scale:1.12, gem:2 },
-  skeletonRaider: { entryId:'Skeleton_Minion', name:'Xương đột kích', icon:'☠', hp:48, defense:1, speed:2.75, dmg:9, scale:0.94, gem:2 },
+  sproutBrute: { entryId:'Enemy', name:'Mầm xanh lực sĩ', icon:'🌿', hp:58, defense:2, speed:1.42, dmg:7, scale:1.38, gem:3 },
+  ratScout: { entryId:'Rat', name:'Chuột trinh sát', icon:'🐭', hp:28, defense:0, speed:3.15, dmg:5, scale:1.04, gem:3 },
+  skeletonGuard: { entryId:'Skeleton_Minion', name:'Vệ binh xương', icon:'💀', hp:72, defense:3, speed:1.82, dmg:8, scale:1.12, gem:6 },
+  skeletonRaider: { entryId:'Skeleton_Minion', name:'Xương đột kích', icon:'☠', hp:48, defense:1, speed:2.75, dmg:9, scale:0.94, gem:10 },
 };
 
 const STAGES = [
@@ -31,6 +32,13 @@ const STAGES = [
   { name:'Đột kích', featured:'skeletonRaider', pool:['ratScout','skeletonGuard','skeletonRaider','skeletonRaider'], interval:0.94, cap:32 },
 ];
 
+const GEM_TIERS = [
+  { min:10, color:0xffd21f, size:0.34, pulse:0.15, glow:true },
+  { min:6, color:0xef4444, size:0.29, pulse:0.1 },
+  { min:3, color:0x38bdf8, size:0.25, pulse:0.08 },
+  { min:1, color:0xa78bfa, size:0.21, pulse:0.06 },
+];
+
 const UPGRADES = [
   { id:'damage', icon:'⚔', name:'Sức mạnh', desc:'+25% sát thương', max:5, apply:g => { g.power.damage *= 1.25; } },
   { id:'speed', icon:'👟', name:'Nhanh chân', desc:'+12% tốc độ chạy', max:5, apply:g => { g.hero.speed *= 1.12; } },
@@ -39,7 +47,7 @@ const UPGRADES = [
   { id:'pierce', icon:'➤', name:'Xuyên phá', desc:'Đạn xuyên thêm 1 quái', max:3, apply:g => { g.power.pierce++; } },
   { id:'size', icon:'◉', name:'Đạn khổng lồ', desc:'+25% kích thước và vùng trúng', max:4, apply:g => { g.power.size *= 1.25; } },
   { id:'health', icon:'♥', name:'Sinh lực', desc:'+30 máu tối đa và hồi đầy', max:5, apply:g => { g.hero.maxHp += 30; g.hero.hp = g.hero.maxHp; } },
-  { id:'magnet', icon:'◆', name:'Nam châm', desc:'+35% phạm vi hút ngọc', max:4, apply:g => { g.power.magnet *= 1.35; } },
+  { id:'magnet', icon:'◆', name:'Nam châm', desc:'+35% phạm vi hút ngọc', max:4, apply:g => { g.power.magnet *= 1.35; g.updateMagnetRing(); } },
   { id:'armor', icon:'⬟', name:'Giáp hộ mệnh', desc:'Giảm 12% sát thương nhận', max:4, apply:g => { g.power.armor *= 0.88; } },
   { id:'range', icon:'◎', name:'Tầm bắn', desc:'+15% tầm bắn', max:5, apply:g => { g.power.range *= 1.15; g.updateRangeRing(); } },
 ];
@@ -152,7 +160,7 @@ export class SurvivorGame {
     this.currentIntro = null;
     this.introRemaining = 0;
     this.upgradeLevels = {};
-    this.power = { damage:1, interval:0.72, multi:1, pierce:0, size:1, magnet:1, range:6.2, attackClock:0.4, armor:1 };
+    this.power = { damage:1, interval:0.72, multi:1, pierce:0, size:1, magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1 };
 
     const heroEntry = byId[selection.hero] || byId.Knight;
     onProgress(0.25, `Đang tải ${heroEntry.name}`);
@@ -164,6 +172,7 @@ export class SurvivorGame {
     this.hero.anim.play('idle');
     scene.add(this.hero.root);
     this.updateRangeRing();
+    this.updateMagnetRing();
 
     onProgress(0.52, 'Đang tải quái');
     await Promise.all(['Enemy','Rat','Skeleton_Minion'].map(id => spawnModel(byId[id])));
@@ -304,6 +313,32 @@ export class SurvivorGame {
     rangeRing.position.y = 0.035;
     this.hero.root.add(rangeRing);
     this.hero.rangeRing = rangeRing;
+    this.updateCameraFov();
+  }
+
+  updateMagnetRing() {
+    if (!this.hero) return;
+    if (this.hero.magnetRing) {
+      this.hero.root.remove(this.hero.magnetRing);
+      this.hero.magnetRing.geometry.dispose();
+    }
+    const radius = 2.2 * this.power.magnet;
+    const magnetRing = new THREE.Mesh(
+      new THREE.RingGeometry(Math.max(0.1, radius - 0.045), radius + 0.045, 64),
+      this.hero.magnetRing?.material || new THREE.MeshBasicMaterial({ color:0xc084fc, transparent:true, opacity:0.38, depthWrite:false })
+    );
+    magnetRing.rotation.x = -Math.PI / 2;
+    magnetRing.position.y = 0.042;
+    this.hero.root.add(magnetRing);
+    this.hero.magnetRing = magnetRing;
+  }
+
+  updateCameraFov() {
+    if (!this.camera || !this.power) return;
+    const baseFov = innerHeight > innerWidth ? 50 : 45;
+    const rangeRatio = Math.max(1, this.power.range / BASE_ATTACK_RANGE);
+    this.camera.fov = baseFov + Math.min(16, (rangeRatio - 1) * 16);
+    this.camera.updateProjectionMatrix();
   }
 
   variantStats(variant, stageIndex = this.stageIndex) {
@@ -684,17 +719,20 @@ export class SurvivorGame {
   }
 
   spawnGem(position, value) {
-    const color = value > 1 ? 0xf472b6 : 0xa78bfa;
+    const tier = GEM_TIERS.find(item => value >= item.min) || GEM_TIERS[GEM_TIERS.length - 1];
+    const material = tier.glow
+      ? new THREE.MeshBasicMaterial({ color:tier.color, toneMapped:false })
+      : new THREE.MeshStandardMaterial({ color:tier.color, emissive:tier.color, emissiveIntensity:0.5, roughness:0.4 });
     const mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(value > 1 ? 0.27 : 0.2, 0),
-      new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:0.35, roughness:0.45 })
+      new THREE.OctahedronGeometry(tier.size, 0),
+      material
     );
     mesh.position.copy(position);
-    mesh.position.y = 0.28;
+    mesh.position.y = 0.3;
     mesh.rotation.z = Math.PI / 4;
     mesh.castShadow = true;
     this.scene.add(mesh);
-    this.pickups.push({ mesh, value, age:0, phase:Math.random() * 6 });
+    this.pickups.push({ mesh, value, tier, age:0, phase:Math.random() * 6 });
   }
 
   updatePickups(dt) {
@@ -703,13 +741,14 @@ export class SurvivorGame {
       pickup.age += dt;
       pickup.phase += dt * 3;
       pickup.mesh.rotation.y += dt * 3;
-      pickup.mesh.position.y = 0.28 + Math.sin(pickup.phase) * 0.08;
+      pickup.mesh.position.y = 0.3 + Math.sin(pickup.phase) * 0.08;
+      pickup.mesh.scale.setScalar(1 + Math.sin(pickup.phase * 1.3) * pickup.tier.pulse);
       const distance = pickup.mesh.position.distanceTo(heroPos);
-      const magnet = 2.2 * this.power.magnet + (pickup.age > 20 ? 8 : 0);
+      const magnet = 2.2 * this.power.magnet;
       if (distance < magnet) {
         pickup.mesh.position.lerp(tmp2.set(heroPos.x, 0.7, heroPos.z), Math.min(1, dt * (3 + magnet / Math.max(distance, 0.2))));
       }
-      if (distance < this.hero.radius + 0.45) this.collectGem(pickup);
+      if (distance < this.hero.radius + 0.45 || pickup.age > 45) this.collectGem(pickup);
     }
     this.pickups = this.pickups.filter(pickup => !pickup.collected);
   }
@@ -731,7 +770,7 @@ export class SurvivorGame {
   }
 
   xpNeeded() {
-    return 5 + (this.level - 1) * 4;
+    return 6 + (this.level - 1) * 7;
   }
 
   showLevelUp() {
@@ -851,8 +890,13 @@ export class SurvivorGame {
   updateCamera(dt) {
     const pos = this.hero.root.position;
     const portrait = innerHeight > innerWidth;
-    const height = portrait ? 17 : 13;
-    const offset = portrait ? 12.5 : 10;
+    const rangeRatio = Math.max(1, this.power.range / BASE_ATTACK_RANGE);
+    const aspect = innerWidth / Math.max(1, innerHeight);
+    const narrowPhoneScale = portrait ? Math.max(1, 0.47 / aspect) : 1;
+    // Camera lùi theo đúng tầm bắn và bù thêm cho điện thoại rất dài/hẹp.
+    const viewScale = 1.38 * rangeRatio * narrowPhoneScale;
+    const height = (portrait ? 17 : 13) * viewScale;
+    const offset = (portrait ? 12.5 : 10) * viewScale;
     tmp.set(pos.x, height, pos.z + offset);
     this.camera.position.lerp(tmp, Math.min(1, dt * 5));
     this.camera.lookAt(this.camera.position.x, 0.55, this.camera.position.z - offset);
@@ -887,8 +931,7 @@ export class SurvivorGame {
   resize(width, height) {
     if (!this.camera) return;
     this.camera.aspect = width / height;
-    this.camera.fov = height > width ? 50 : 45;
-    this.camera.updateProjectionMatrix();
+    this.updateCameraFov();
     this.updateEnemyLabels();
   }
 
@@ -913,6 +956,11 @@ export class SurvivorGame {
       unit.root.remove(unit.rangeRing);
       unit.rangeRing.geometry.dispose();
       unit.rangeRing.material.dispose();
+    }
+    if (unit.magnetRing) {
+      unit.root.remove(unit.magnetRing);
+      unit.magnetRing.geometry.dispose();
+      unit.magnetRing.material.dispose();
     }
     const skeletons = new Set();
     unit.model?.traverse(object => {
