@@ -347,6 +347,11 @@ const SPECIAL_UPGRADES = [
   { id:'blast', icon:'✹', name:'Nổ lan', desc:'Fireball gây nổ quanh mục tiêu', max:4, apply:g => { g.power.blast++; } },
   { id:'freeze', icon:'❄', name:'Băng giá', desc:'Làm chậm, có cơ hội đóng băng quái', max:4, apply:g => { g.power.freeze++; } },
   { id:'burnAura', icon:'🔥', name:'Vòng lửa', desc:'Thiêu đốt quái đi vào vòng quanh bạn', max:5, apply:g => { g.power.burnAura++; g.updateBurnAura(); } },
+  {
+    id:'orbit', icon:'🌀', name:'Vòng xoáy',
+    desc:'3 vòng bay quanh bạn · cấp cao bay xa & sát thương mạnh hơn',
+    max:5, apply:g => { g.power.orbit++; g.updateOrbit(); },
+  },
 ];
 
 /** Thẻ rủi ro: mạnh hơn nhưng có đánh đổi. */
@@ -569,8 +574,10 @@ export class SurvivorGame {
     this.power = {
       damage:1, damageBonus:1, interval:0.72, multi:1, pierce:0, size:1,
       magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
-      chain:0, blast:0, freeze:0, burnAura:0, takenDamageMult:1,
+      chain:0, blast:0, freeze:0, burnAura:0, orbit:0, takenDamageMult:1,
     };
+    this.orbitAngle = 0;
+    this.orbitTick = 0;
 
     const heroEntry = byId[selection.hero] || byId.Knight;
     onProgress(0.25, `Đang tải ${heroEntry.name}`);
@@ -587,6 +594,7 @@ export class SurvivorGame {
     this.updateRangeRing();
     this.updateMagnetRing();
     this.updateBurnAura();
+    this.updateOrbit();
     this.renderAttrRows();
     this.updateAttrBadge();
 
@@ -864,6 +872,157 @@ export class SurvivorGame {
     }
   }
 
+  orbitRadius() {
+    const level = this.power.orbit || 0;
+    if (level <= 0) return 0;
+    // Cấp cao → bay xa hơn quanh hero.
+    return 1.35 + level * 0.48;
+  }
+
+  orbitOrbHitRadius() {
+    const level = this.power.orbit || 0;
+    if (level <= 0) return 0;
+    return 0.42 + level * 0.05;
+  }
+
+  orbitDps() {
+    const level = this.power.orbit || 0;
+    if (level <= 0) return 0;
+    return (7.2 + level * 3.4) * this.power.damage * (this.tempBuffs.damage?.mult || 1);
+  }
+
+  clearOrbit() {
+    if (!this.hero?.orbitGroup) return;
+    this.hero.root.remove(this.hero.orbitGroup);
+    if (this.hero.orbitPath) {
+      this.hero.orbitPath.geometry.dispose();
+      this.hero.orbitPath.material.dispose();
+    }
+    const shared = this.hero.orbitShared;
+    if (shared) {
+      shared.orbGeo?.dispose();
+      shared.orbMat?.dispose();
+      shared.coreGeo?.dispose();
+      shared.coreMat?.dispose();
+    }
+    this.hero.orbitGroup = null;
+    this.hero.orbitOrbs = null;
+    this.hero.orbitPath = null;
+    this.hero.orbitShared = null;
+  }
+
+  updateOrbit() {
+    if (!this.hero) return;
+    this.clearOrbit();
+    const level = this.power.orbit || 0;
+    if (level <= 0) return;
+
+    const radius = this.orbitRadius();
+    const group = new THREE.Group();
+    group.name = 'orbitSwirl';
+
+    // Vệt quỹ đạo mờ trên sàn — gợi phạm vi bay.
+    const path = new THREE.Mesh(
+      new THREE.RingGeometry(Math.max(0.12, radius - 0.08), radius + 0.08, 56),
+      new THREE.MeshBasicMaterial({
+        color:0x7dd3fc, transparent:true, opacity:0.22, depthWrite:false,
+        blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
+      })
+    );
+    path.rotation.x = -Math.PI / 2;
+    path.position.y = 0.04;
+    group.add(path);
+
+    // Một geometry/material dùng chung cho 3 vòng — tối ưu giống gem shared.
+    const orbGeo = new THREE.TorusGeometry(0.28, 0.09, 10, 22);
+    const orbMat = new THREE.MeshBasicMaterial({
+      color:0x38bdf8, transparent:true, opacity:0.92, depthWrite:false,
+      blending:THREE.AdditiveBlending,
+    });
+    const coreGeo = new THREE.SphereGeometry(0.14, 12, 10);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color:0xe0f2fe, transparent:true, opacity:0.95, depthWrite:false,
+      blending:THREE.AdditiveBlending,
+    });
+
+    const orbs = [];
+    for (let i = 0; i < 3; i++) {
+      const pivot = new THREE.Group();
+      const torus = new THREE.Mesh(orbGeo, orbMat);
+      torus.rotation.x = Math.PI / 2;
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      pivot.add(torus, core);
+      pivot.position.y = 0.72;
+      group.add(pivot);
+      orbs.push(pivot);
+    }
+
+    this.hero.root.add(group);
+    this.hero.orbitGroup = group;
+    this.hero.orbitOrbs = orbs;
+    this.hero.orbitPath = path;
+    this.hero.orbitShared = { orbGeo, orbMat, coreGeo, coreMat };
+    this.syncOrbitPositions(this.orbitAngle || 0);
+  }
+
+  syncOrbitPositions(angle) {
+    const orbs = this.hero?.orbitOrbs;
+    if (!orbs?.length) return;
+    const radius = this.orbitRadius();
+    const spin = this.elapsed * 6;
+    for (let i = 0; i < orbs.length; i++) {
+      const a = angle + (i * Math.PI * 2) / 3;
+      const orb = orbs[i];
+      orb.position.x = Math.cos(a) * radius;
+      orb.position.z = Math.sin(a) * radius;
+      orb.position.y = 0.68 + Math.sin(spin + i * 1.7) * 0.08;
+      // Xoay cục bộ cho cảm giác “vòng xoáy”.
+      orb.rotation.y = a + Math.PI / 2;
+      orb.children[0].rotation.z = spin * 1.4 + i;
+    }
+    if (this.hero.orbitPath) {
+      const pulse = 0.94 + Math.sin(this.elapsed * 4.2) * 0.06;
+      this.hero.orbitPath.scale.set(pulse, pulse, pulse);
+      this.hero.orbitPath.material.opacity = 0.16 + Math.sin(this.elapsed * 3.5) * 0.06;
+    }
+  }
+
+  updateOrbitCombat(dt) {
+    const level = this.power.orbit || 0;
+    if (level <= 0 || !this.hero?.orbitOrbs?.length) return;
+
+    // Bay nhanh hơn mỗi cấp.
+    const speed = 2.4 + level * 0.35;
+    this.orbitAngle = (this.orbitAngle || 0) + speed * dt;
+    this.syncOrbitPositions(this.orbitAngle);
+
+    this.orbitTick -= dt;
+    if (this.orbitTick > 0) return;
+    this.orbitTick = 0.14;
+
+    const hitR = this.orbitOrbHitRadius();
+    const hitRSq = hitR * hitR;
+    const damage = this.orbitDps() * 0.14;
+    const heroPos = this.hero.root.position;
+    const orbs = this.hero.orbitOrbs;
+
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const ex = enemy.root.position.x;
+      const ez = enemy.root.position.z;
+      for (const orb of orbs) {
+        const ox = heroPos.x + orb.position.x;
+        const oz = heroPos.z + orb.position.z;
+        const dx = ex - ox;
+        const dz = ez - oz;
+        if (dx * dx + dz * dz <= hitRSq) {
+          this.hitEnemy(enemy, damage);
+          break;
+        }
+      }
+    }
+  }
+
   updateCameraFov() {
     if (!this.camera || !this.power) return;
     const baseFov = innerHeight > innerWidth ? 50 : 45;
@@ -949,6 +1108,7 @@ export class SurvivorGame {
       this.updateHero(dt);
       this.updateRegen(dt);
       this.updateBurnAuraCombat(dt);
+      this.updateOrbitCombat(dt);
       this.updateSpawner(dt);
       this.updateBossEvents();
       this.updateSafeRing(dt);
@@ -2288,6 +2448,24 @@ export class SurvivorGame {
         ring.material.dispose();
       }
       unit.burnRings = [];
+    }
+    if (unit.orbitGroup) {
+      unit.root.remove(unit.orbitGroup);
+      if (unit.orbitPath) {
+        unit.orbitPath.geometry.dispose();
+        unit.orbitPath.material.dispose();
+      }
+      const shared = unit.orbitShared;
+      if (shared) {
+        shared.orbGeo?.dispose();
+        shared.orbMat?.dispose();
+        shared.coreGeo?.dispose();
+        shared.coreMat?.dispose();
+      }
+      unit.orbitGroup = null;
+      unit.orbitOrbs = null;
+      unit.orbitPath = null;
+      unit.orbitShared = null;
     }
     const skeletons = new Set();
     unit.model?.traverse(object => {
