@@ -5,9 +5,13 @@ import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower, isMobi
 import { bindLobbyLinks } from '../lobby-nav.js';
 
 const ARENA = 27;
+const ARENA_MIN = 12;
+const RING_START_AT = 180;       // giây: bắt đầu thu hẹp
+const RING_SHRINK_PER_SEC = 0.042;
 const ENEMY_CAP = 55;
 const STAGE_DURATION = 50;
 const BASE_ATTACK_RANGE = 6.2;
+const FIELD_DROP_MAX = 2;
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -61,6 +65,54 @@ const SPECIAL_UPGRADES = [
   { id:'freeze', icon:'❄', name:'Băng giá', desc:'Làm chậm, có cơ hội đóng băng quái', max:4, apply:g => { g.power.freeze++; } },
 ];
 
+/** Thẻ rủi ro: mạnh hơn nhưng có đánh đổi. */
+const RISK_UPGRADES = [
+  {
+    id:'riskPower', icon:'⚖', name:'Giao kèo máu', kind:'risk', max:1,
+    desc:'+45% sát thương · −20% máu tối đa',
+    apply:g => {
+      g.power.damageBonus *= 1.45;
+      g.hero.baseMaxHp = Math.max(80, Math.round(g.hero.baseMaxHp * 0.8));
+      g.recalcAttributes();
+      g.hero.hp = Math.min(g.hero.hp, g.hero.maxHp);
+    },
+  },
+  {
+    id:'riskGlass', icon:'🪞', name:'Thủy tinh sắc', kind:'risk', max:1,
+    desc:'+1 xuyên phá · nhận thêm 25% sát thương',
+    apply:g => {
+      g.power.pierce++;
+      g.power.takenDamageMult *= 1.25;
+    },
+  },
+  {
+    id:'riskSwift', icon:'💨', name:'Gió đổi mạng', kind:'risk', max:1,
+    desc:'+22% tốc chạy · −12% tầm bắn',
+    apply:g => {
+      g.hero.baseSpeed *= 1.22;
+      g.power.range *= 0.88;
+      g.recalcAttributes();
+      g.updateRangeRing();
+    },
+  },
+];
+
+/** Đồng bộ tự mở khi đủ 2 skill gốc. */
+const SYNERGY_DEFS = [
+  {
+    id:'frostBurst', requires:['freeze','blast'], icon:'❄✹',
+    name:'Nổ băng', desc:'Vụ nổ cũng đóng băng quái xung quanh',
+  },
+  {
+    id:'stormVolley', requires:['chain','multi'], icon:'ϟ➹',
+    name:'Mưa sét', desc:'Mỗi tia đạn thêm 1 nhảy sét',
+  },
+  {
+    id:'shrapnel', requires:['pierce','blast'], icon:'➤✹',
+    name:'Mảnh nổ', desc:'Mỗi lần xuyên kích hoạt nổ nhỏ',
+  },
+];
+
 const ATTR_POINT_CARD = {
   id:'attrPoint',
   icon:'◎',
@@ -69,6 +121,20 @@ const ATTR_POINT_CARD = {
   kind:'attr',
   max:999,
 };
+
+const BOSS_EVENTS = [
+  { at:120, variantId:'bossRex', entryId:'Trex', name:'T-Rex Hung Hãn', icon:'🦖', hp:560, defense:4, speed:2.15, dmg:16, scale:1.12, gem:28 },
+  { at:240, variantId:'bossTri', entryId:'Triceratops', name:'Tri Sừng Thép', icon:'🦕', hp:820, defense:6, speed:2.3, dmg:20, scale:1.05, gem:42 },
+  { at:360, variantId:'bossRex2', entryId:'Trex', name:'T-Rex Ác Mộng', icon:'🦖', hp:1200, defense:8, speed:2.45, dmg:26, scale:1.26, gem:65 },
+];
+
+const FIELD_DROPS = [
+  { id:'fieldAttr', icon:'◎', color:0xa78bfa, name:'Điểm thuộc tính', apply:g => { g.attrPoints++; g.updateAttrBadge(); g.renderAttrRows(); } },
+  { id:'fieldHeal', icon:'♥', color:0x22c55e, name:'Hồi máu', apply:g => { g.hero.hp = Math.min(g.hero.maxHp, g.hero.hp + Math.round(g.hero.maxHp * 0.28)); } },
+  { id:'fieldXp', icon:'✦', color:0xfbbf24, name:'Bùng nổ XP', apply:g => { g.grantXp(14); } },
+  { id:'fieldShield', icon:'⛨', color:0x60a5fa, name:'Khiên tạm', apply:g => { g.hero.invulnerable = Math.max(g.hero.invulnerable, 2.4); } },
+  { id:'fieldRage', icon:'⚔', color:0xef4444, name:'Nộ chiến', apply:g => { g.tempBuffs.damage = { t:9, mult:1.4 }; } },
+];
 
 function easeOutBack(x) {
   const c = 1.70158;
@@ -177,6 +243,7 @@ export class SurvivorGame {
     this.enemies = [];
     this.projectiles = [];
     this.pickups = [];
+    this.fieldDrops = [];
     this.combatEffects = [];
     this.effectPool = { blast:[], chain:[] };
     this.gemPool = new Map();
@@ -202,10 +269,18 @@ export class SurvivorGame {
     this.upgradeLevels = {};
     this.attrPoints = 0;
     this.attrs = { str:0, agi:0, vit:0, def:0 };
+    this.synergies = { frostBurst:false, stormVolley:false, shrapnel:false };
+    this.bossSpawned = {};
+    this.arenaRadius = ARENA;
+    this.ringDamageClock = 0;
+    this.fieldDropClock = 12 + Math.random() * 6;
+    this.tempBuffs = {};
+    this.eventBannerText = '';
+    this.eventBannerT = 0;
     this.power = {
       damage:1, damageBonus:1, interval:0.72, multi:1, pierce:0, size:1,
       magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
-      chain:0, blast:0, freeze:0,
+      chain:0, blast:0, freeze:0, takenDamageMult:1,
     };
 
     const heroEntry = byId[selection.hero] || byId.Knight;
@@ -226,7 +301,7 @@ export class SurvivorGame {
     this.updateAttrBadge();
 
     onProgress(0.52, 'Đang tải quái');
-    await Promise.all(['Enemy','Rat','Skeleton_Minion'].map(id => spawnModel(byId[id])));
+    await Promise.all(['Enemy','Rat','Skeleton_Minion','Trex','Triceratops'].map(id => spawnModel(byId[id])));
     if (runId !== this.runId) return;
 
     onProgress(0.68, 'Đang nạp cầu lửa');
@@ -303,6 +378,23 @@ export class SurvivorGame {
       flower.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
       world.add(flower);
     }
+
+    // Vòng lửa thu hẹp — scale theo arenaRadius.
+    const ringSegs = mobile ? 48 : 64;
+    this.safeRing = new THREE.Mesh(
+      new THREE.RingGeometry(ARENA - 0.22, ARENA + 0.18, ringSegs),
+      new THREE.MeshBasicMaterial({ color:0xff7a59, transparent:true, opacity:0.0, depthWrite:false, side:THREE.DoubleSide })
+    );
+    this.safeRing.rotation.x = -Math.PI / 2;
+    this.safeRing.position.y = 0.05;
+    world.add(this.safeRing);
+    this.dangerDisk = new THREE.Mesh(
+      new THREE.RingGeometry(ARENA + 0.2, ARENA + 14, ringSegs),
+      new THREE.MeshBasicMaterial({ color:0xef4444, transparent:true, opacity:0.0, depthWrite:false, side:THREE.DoubleSide })
+    );
+    this.dangerDisk.rotation.x = -Math.PI / 2;
+    this.dangerDisk.position.y = 0.04;
+    world.add(this.dangerDisk);
   }
 
   makeUnit(entry, { root, model, clips }, stats) {
@@ -449,12 +541,12 @@ export class SurvivorGame {
       const a = Math.random() * Math.PI * 2;
       const r = 15 + Math.random() * 5;
       enemy.root.position.set(heroPos.x + Math.cos(a) * r, 0, heroPos.z + Math.sin(a) * r);
-      if (enemy.root.position.length() <= ARENA - 1) { placed = true; break; }
+      if (enemy.root.position.length() <= this.arenaRadius - 1.2) { placed = true; break; }
     }
     if (!placed) {
       tmp2.set(-heroPos.x, 0, -heroPos.z);
       if (tmp2.lengthSq() < 0.01) tmp2.set(1, 0, 0);
-      tmp2.setLength(15);
+      tmp2.setLength(Math.min(15, this.arenaRadius - 2));
       enemy.root.position.copy(heroPos).add(tmp2);
     }
     enemy.root.scale.setScalar(0.01);
@@ -468,13 +560,18 @@ export class SurvivorGame {
     dt = Math.min(dt, 0.05);
     if (this.state === 'playing') {
       this.elapsed += dt;
+      this.updateTempBuffs(dt);
       this.updateHero(dt);
       this.updateSpawner(dt);
+      this.updateBossEvents();
+      this.updateSafeRing(dt);
       this.updateEnemies(dt);
       this.updateProjectiles(dt);
       this.updateCombatEffects(dt);
       this.updatePickups(dt);
+      this.updateFieldDrops(dt);
       this.updateEnemyIntro(dt);
+      this.updateEventBanner(dt);
       this.updateCamera(dt);
       this.hintClock -= dt;
       if (this.hintClock <= 0) this.ui.hint.style.opacity = '0';
@@ -600,12 +697,19 @@ export class SurvivorGame {
 
   buildLevelUpHand() {
     const specials = SPECIAL_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
+    const risks = RISK_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
     const hand = [];
     const seen = new Set();
-    const pool = [...specials];
+    const pool = [...specials, ...risks];
     if (this.canSpendAnyAttr()) {
       // Bias lightly toward offering an attribute point each level-up.
       pool.push(ATTR_POINT_CARD, ATTR_POINT_CARD);
+    }
+    // After level 8, attribute points appear less often.
+    if (this.level >= 8 && Math.random() < 0.45) {
+      for (let i = pool.length - 1; i >= 0; i--) {
+        if (pool[i].id === 'attrPoint') pool.splice(i, 1);
+      }
     }
     shuffle(pool);
     for (const card of pool) {
@@ -618,7 +722,7 @@ export class SurvivorGame {
       seen.add(ATTR_POINT_CARD.id);
       hand.push(ATTR_POINT_CARD);
     }
-    for (const card of specials) {
+    for (const card of [...specials, ...risks]) {
       if (hand.length >= 3) break;
       if (seen.has(card.id)) continue;
       seen.add(card.id);
@@ -636,6 +740,219 @@ export class SurvivorGame {
       });
     }
     return hand.slice(0, 3);
+  }
+
+  flashEvent(text, duration = 3.2) {
+    this.eventBannerText = text;
+    this.eventBannerT = duration;
+    if (this.ui.eventBanner) {
+      this.ui.eventBanner.textContent = text;
+      this.ui.eventBanner.classList.remove('hidden');
+    }
+  }
+
+  updateEventBanner(dt) {
+    if (this.eventBannerT <= 0) return;
+    this.eventBannerT -= dt;
+    if (this.eventBannerT > 0) return;
+    this.eventBannerText = '';
+    this.ui.eventBanner?.classList.add('hidden');
+  }
+
+  updateTempBuffs(dt) {
+    for (const [key, buff] of Object.entries(this.tempBuffs)) {
+      buff.t -= dt;
+      if (buff.t <= 0) delete this.tempBuffs[key];
+    }
+  }
+
+  grantXp(amount) {
+    this.xp += amount;
+    while (this.xp >= this.xpNeeded()) {
+      this.xp -= this.xpNeeded();
+      this.level++;
+      this.pendingLevels++;
+    }
+    if (this.pendingLevels > 0 && this.state === 'playing') this.showLevelUp();
+  }
+
+  checkSynergies() {
+    const owned = this.upgradeLevels;
+    for (const syn of SYNERGY_DEFS) {
+      if (this.synergies[syn.id]) continue;
+      if (!syn.requires.every(id => (owned[id] || 0) > 0)) continue;
+      this.synergies[syn.id] = true;
+      this.toast(`${syn.icon} Đồng bộ: ${syn.name}`);
+      this.flashEvent(`${syn.icon} ${syn.name} — ${syn.desc}`, 3.6);
+    }
+  }
+
+  updateSafeRing(dt) {
+    if (!this._ringWarned && this.elapsed >= RING_START_AT - 8) {
+      this._ringWarned = true;
+      this.flashEvent('⚠ Vòng lửa sắp thu hẹp!', 3.5);
+    }
+    if (this.elapsed >= RING_START_AT) {
+      if (!this._ringStarted) {
+        this._ringStarted = true;
+        this.flashEvent('🔥 Vòng lửa đang thu hẹp!', 3.8);
+        this.toast('🔥 Vòng lửa thu hẹp');
+      }
+      this.arenaRadius = Math.max(ARENA_MIN, this.arenaRadius - RING_SHRINK_PER_SEC * dt);
+    }
+    const radius = this.arenaRadius;
+    if (this.safeRing) {
+      const visible = this.elapsed >= RING_START_AT - 10;
+      this.safeRing.material.opacity = visible ? 0.72 : 0;
+      this.safeRing.scale.setScalar(radius / ARENA);
+      this.dangerDisk.material.opacity = visible ? 0.16 : 0;
+      this.dangerDisk.scale.setScalar(radius / ARENA);
+    }
+    const hero = this.hero;
+    if (!hero || hero.dead) return;
+    const dist = hero.root.position.length();
+    if (dist > radius - 0.55) {
+      this.ringDamageClock -= dt;
+      hero.root.position.setLength(Math.min(dist, radius - 0.35));
+      if (this.ringDamageClock <= 0) {
+        this.ringDamageClock = 0.45;
+        this.damageHero(7 + Math.floor((ARENA - radius) * 0.35), -hero.root.position.x, -hero.root.position.z);
+      }
+    } else {
+      this.ringDamageClock = 0;
+    }
+  }
+
+  async updateBossEvents() {
+    for (const event of BOSS_EVENTS) {
+      if (this.elapsed < event.at || this.bossSpawned[event.variantId]) continue;
+      this.bossSpawned[event.variantId] = true;
+      this.flashEvent(`${event.icon} Boss: ${event.name}`, 4.2);
+      this.toast(`${event.icon} ${event.name}`);
+      this.spawnBoss(event);
+    }
+  }
+
+  async spawnBoss(event) {
+    if (!this.scene) return;
+    const runId = this.runId;
+    const entry = byId[event.entryId];
+    if (!entry) return;
+    this.pendingSpawns++;
+    let model;
+    try {
+      model = await spawnModel(entry, entry.height);
+    } finally {
+      this.pendingSpawns = Math.max(0, this.pendingSpawns - 1);
+    }
+    if (runId !== this.runId || !this.scene) return;
+    const enemy = this.makeUnit(entry, model, {
+      ...entry.stats,
+      team:'enemy',
+      hp:event.hp,
+      speed:event.speed,
+      dmg:event.dmg,
+    });
+    enemy.maxHp = enemy.hp;
+    enemy.defense = event.defense;
+    enemy.gem = event.gem;
+    enemy.visualScale = event.scale;
+    enemy.radius *= event.scale * 1.15;
+    enemy.isBoss = true;
+    enemy.bossName = event.name;
+    enemy.bossIcon = event.icon;
+    enemy.spawn = 0;
+    enemy.hitFlash = 0;
+    enemy.slowT = 0;
+    enemy.slowFactor = 1;
+    enemy.paralyzeT = 0;
+    enemy.bossCd = 2.5;
+    enemy.telegraphT = 0;
+    enemy.chargeT = 0;
+    enemy.chargeDir = new THREE.Vector3();
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.min(this.arenaRadius - 2.5, 14);
+    enemy.root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    enemy.root.scale.setScalar(0.01);
+    enemy.ring.material.color.setHex(0xa855f7);
+    enemy.anim.play('run');
+    this.scene.add(enemy.root);
+    this.enemies.push(enemy);
+    this.ensureEnemyHealth(enemy);
+    this.updateEnemyHealth(enemy);
+  }
+
+  updateFieldDrops(dt) {
+    this.fieldDropClock -= dt;
+    if (this.fieldDropClock <= 0 && this.fieldDrops.length < FIELD_DROP_MAX) {
+      this.fieldDropClock = 16 + Math.random() * 12;
+      this.spawnFieldDrop();
+    }
+    for (const drop of this.fieldDrops) {
+      drop.life -= dt;
+      drop.phase += dt * 3.2;
+      drop.mesh.rotation.y += dt * 2.4;
+      drop.mesh.position.y = 0.55 + Math.sin(drop.phase) * 0.12;
+      drop.halo.material.opacity = 0.35 + Math.sin(drop.phase * 1.4) * 0.2;
+      if (drop.life < 4) drop.mesh.scale.setScalar(0.75 + Math.sin(drop.phase * 8) * 0.12);
+      const dx = drop.mesh.position.x - this.hero.root.position.x;
+      const dz = drop.mesh.position.z - this.hero.root.position.z;
+      if (dx * dx + dz * dz < (this.hero.radius + 0.7) ** 2) {
+        drop.def.apply(this);
+        this.toast(`${drop.def.icon} ${drop.def.name}`);
+        this.flashEvent(`${drop.def.icon} Nhặt được: ${drop.def.name}`, 2.4);
+        drop.dead = true;
+        this.updateHud();
+      } else if (drop.life <= 0) {
+        drop.dead = true;
+      }
+    }
+    for (const drop of this.fieldDrops) {
+      if (!drop.dead) continue;
+      this.scene.remove(drop.mesh);
+      drop.mesh.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+    }
+    this.fieldDrops = this.fieldDrops.filter(drop => !drop.dead);
+  }
+
+  spawnFieldDrop() {
+    if (!this.scene || !this.hero) return;
+    const def = FIELD_DROPS[Math.floor(Math.random() * FIELD_DROPS.length)];
+    const life = 15 + Math.random() * 15;
+    const group = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.38, 0),
+      new THREE.MeshBasicMaterial({ color:def.color, toneMapped:false })
+    );
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.68, 28),
+      new THREE.MeshBasicMaterial({ color:def.color, transparent:true, opacity:0.5, depthWrite:false, side:THREE.DoubleSide })
+    );
+    halo.rotation.x = -Math.PI / 2;
+    group.add(core);
+    group.add(halo);
+    let placed = false;
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 4 + Math.random() * Math.max(3, this.arenaRadius - 5);
+      group.position.set(Math.cos(a) * r, 0.55, Math.sin(a) * r);
+      const dx = group.position.x - this.hero.root.position.x;
+      const dz = group.position.z - this.hero.root.position.z;
+      if (dx * dx + dz * dz > 16 && group.position.length() < this.arenaRadius - 1.2) {
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const a = Math.random() * Math.PI * 2;
+      group.position.set(Math.cos(a) * (this.arenaRadius * 0.55), 0.55, Math.sin(a) * (this.arenaRadius * 0.55));
+    }
+    this.scene.add(group);
+    this.fieldDrops.push({ mesh:group, halo, def, life, phase:Math.random() * 6, dead:false });
+    this.flashEvent(`${def.icon} Phần thưởng xuất hiện trên bản đồ!`, 2.8);
   }
 
   updateHero(dt) {
@@ -657,7 +974,7 @@ export class SurvivorGame {
       hero.root.position.z += z * hero.speed * dt;
       this.faceTo(hero, hero.root.position.x + x, hero.root.position.z + z, dt, 16);
       hero.anim.play('run');
-      if (hero.root.position.length() > ARENA - 0.8) hero.root.position.setLength(ARENA - 0.8);
+      if (hero.root.position.length() > this.arenaRadius - 0.8) hero.root.position.setLength(this.arenaRadius - 0.8);
     } else if (hero.anim.currentKey === 'run') {
       hero.anim.play('idle');
     }
@@ -703,7 +1020,7 @@ export class SurvivorGame {
       speed,
       distance:0,
       maxDistance:this.power.range,
-      damage:this.hero.dmg * this.power.damage,
+      damage:this.hero.dmg * this.power.damage * (this.tempBuffs.damage?.mult || 1),
       hits:new Set(), remaining:this.power.pierce,
       secondaryHits:new Set(),
       radius:radius + 0.18,
@@ -758,18 +1075,22 @@ export class SurvivorGame {
     this.scene.remove(projectile.mesh);
   }
 
+  applyFreeze(enemy, strength = this.power.freeze) {
+    if (!enemy || enemy.dead || strength <= 0) return;
+    enemy.slowT = Math.max(enemy.slowT, 1.4 + strength * 0.35);
+    enemy.slowFactor = Math.min(enemy.slowFactor, Math.max(0.38, 0.82 - strength * 0.1));
+    if (Math.random() < 0.06 + strength * 0.04) {
+      enemy.paralyzeT = Math.max(enemy.paralyzeT, 0.45 + strength * 0.1);
+    }
+  }
+
   applyProjectileEffects(primary, damage, projectile) {
     const P = this.power;
     const origin = primary.root.position.clone();
     projectile.secondaryHits.add(primary);
+    const hitCount = projectile.hits.size;
 
-    if (P.freeze > 0 && !primary.dead) {
-      primary.slowT = Math.max(primary.slowT, 1.4 + P.freeze * 0.35);
-      primary.slowFactor = Math.min(primary.slowFactor, Math.max(0.38, 0.82 - P.freeze * 0.1));
-      if (Math.random() < 0.06 + P.freeze * 0.04) {
-        primary.paralyzeT = Math.max(primary.paralyzeT, 0.45 + P.freeze * 0.1);
-      }
-    }
+    if (P.freeze > 0 && !primary.dead) this.applyFreeze(primary);
 
     if (P.blast > 0) {
       const radius = 1.2 + P.blast * 0.35;
@@ -779,17 +1100,31 @@ export class SurvivorGame {
         if (enemy.root.position.distanceToSquared(origin) <= radius * radius) {
           projectile.secondaryHits.add(enemy);
           this.hitEnemy(enemy, splashDamage);
+          if (this.synergies.frostBurst) this.applyFreeze(enemy, Math.max(1, P.freeze));
         }
       }
       this.addBlastEffect(origin, radius);
     }
 
-    if (P.chain > 0) {
+    // Mảnh nổ: mỗi lần xuyên (từ hit thứ 2) nổ nhỏ quanh mục tiêu.
+    if (this.synergies.shrapnel && hitCount >= 2) {
+      const radius = 0.95;
+      for (const enemy of this.enemies) {
+        if (enemy.dead || enemy === primary) continue;
+        if (enemy.root.position.distanceToSquared(origin) <= radius * radius) {
+          this.hitEnemy(enemy, damage * 0.22);
+        }
+      }
+      this.addBlastEffect(origin, radius);
+    }
+
+    const chainJumps = P.chain + (this.synergies.stormVolley ? Math.max(0, P.multi - 1) : 0);
+    if (chainJumps > 0) {
       const used = projectile.secondaryHits;
       const chainRange = 4.1 + P.chain * 0.35;
       const chainDamage = damage * (0.3 + P.chain * 0.04);
       let from = primary;
-      for (let jump = 0; jump < P.chain; jump++) {
+      for (let jump = 0; jump < chainJumps; jump++) {
         let target = null, best = chainRange * chainRange;
         for (const enemy of this.enemies) {
           if (enemy.dead || used.has(enemy)) continue;
@@ -800,6 +1135,7 @@ export class SurvivorGame {
         this.addChainEffect(from.root.position, target.root.position);
         used.add(target);
         this.hitEnemy(target, chainDamage);
+        if (this.synergies.frostBurst && P.freeze > 0) this.applyFreeze(target);
         from = target;
       }
     }
@@ -964,7 +1300,8 @@ export class SurvivorGame {
       const status = enemy.paralyzeT > 0 ? 2 : enemy.slowT > 0 ? 1 : 0;
       if (status !== enemy.status) {
         enemy.status = status;
-        enemy.ring.material.color.setHex(status === 2 ? 0xfde047 : status === 1 ? 0x38bdf8 : 0xf87171);
+        const base = enemy.isBoss ? 0xa855f7 : 0xf87171;
+        enemy.ring.material.color.setHex(status === 2 ? 0xfde047 : status === 1 ? 0x38bdf8 : base);
       }
 
       const pos = enemy.root.position;
@@ -996,22 +1333,47 @@ export class SurvivorGame {
       }
 
       const moveScale = enemy.paralyzeT > 0 ? 0 : enemy.slowT > 0 ? enemy.slowFactor : 1;
-      const seekX = dx / distance * enemy.speed * moveScale;
-      const seekZ = dz / distance * enemy.speed * moveScale;
-      const moveX = seekX + sepX * 3.4;
-      const moveZ = seekZ + sepZ * 3.4;
-      pos.x += moveX * dt;
-      pos.z += moveZ * dt;
-      // Face along actual motion so diagonal crowd pushes don't whip the mesh.
-      if (moveX * moveX + moveZ * moveZ > 0.04) this.faceTo(enemy, pos.x + moveX, pos.z + moveZ, dt, 10);
-      else this.faceTo(enemy, heroPos.x, heroPos.z, dt, 8);
-      enemy.anim.play(moveScale > 0 ? 'run' : 'idle');
+      if (enemy.isBoss) {
+        enemy.bossCd = Math.max(0, (enemy.bossCd || 0) - dt);
+        if (enemy.telegraphT > 0) {
+          enemy.telegraphT -= dt;
+          enemy.anim.play('idle');
+          enemy.ring.material.color.setHex(0xfde047);
+          if (enemy.telegraphT <= 0) {
+            enemy.chargeT = 0.75;
+            enemy.chargeDir.set(dx / distance, 0, dz / distance);
+            enemy.bossCd = 4.2;
+          }
+        } else if (enemy.chargeT > 0) {
+          enemy.chargeT -= dt;
+          pos.x += enemy.chargeDir.x * enemy.speed * 2.8 * dt;
+          pos.z += enemy.chargeDir.z * enemy.speed * 2.8 * dt;
+          this.faceTo(enemy, pos.x + enemy.chargeDir.x, pos.z + enemy.chargeDir.z, dt, 14);
+          enemy.anim.play('run');
+          enemy.ring.material.color.setHex(0xef4444);
+        } else if (enemy.bossCd <= 0 && moveScale > 0) {
+          enemy.telegraphT = 0.95;
+        }
+      }
+      if (!(enemy.isBoss && (enemy.telegraphT > 0 || enemy.chargeT > 0))) {
+        const seekX = dx / distance * enemy.speed * moveScale;
+        const seekZ = dz / distance * enemy.speed * moveScale;
+        const moveX = seekX + sepX * (enemy.isBoss ? 1.2 : 3.4);
+        const moveZ = seekZ + sepZ * (enemy.isBoss ? 1.2 : 3.4);
+        pos.x += moveX * dt;
+        pos.z += moveZ * dt;
+        if (moveX * moveX + moveZ * moveZ > 0.04) this.faceTo(enemy, pos.x + moveX, pos.z + moveZ, dt, 10);
+        else this.faceTo(enemy, heroPos.x, heroPos.z, dt, 8);
+        enemy.anim.play(moveScale > 0 ? 'run' : 'idle');
+      }
+      if (pos.length() > this.arenaRadius - 0.6) pos.setLength(this.arenaRadius - 0.6);
 
       dx = heroPos.x - pos.x;
       dz = heroPos.z - pos.z;
       distance = Math.max(0.001, Math.hypot(dx, dz));
       if (distance < this.hero.radius + enemy.radius + 0.12 && this.hero.invulnerable <= 0) {
-        this.damageHero(enemy.dmg, dx / distance, dz / distance);
+        const bump = enemy.isBoss && enemy.chargeT > 0 ? 1.55 : 1;
+        this.damageHero(enemy.dmg * bump, dx / distance, dz / distance);
       }
     }
     this.enemies = this.enemies.filter(enemy => !enemy.removed);
@@ -1079,16 +1441,25 @@ export class SurvivorGame {
       enemy.anim.play('death', { once:true, clamp:true });
       this.kills++;
       this.spawnGem(enemy.root.position, enemy.gem);
+      if (enemy.isBoss) {
+        this.spawnGem(enemy.root.position, Math.max(12, Math.round(enemy.gem * 0.5)));
+        this.attrPoints++;
+        this.updateAttrBadge();
+        this.renderAttrRows();
+        this.toast(`${enemy.bossIcon || '★'} Hạ ${enemy.bossName || 'Boss'}! +1 điểm`);
+        this.flashEvent(`${enemy.bossIcon || '★'} Boss bị đánh bại!`, 3.5);
+        this.grantXp(18);
+      }
     }
   }
 
   damageHero(amount, dx, dz) {
-    const damage = Math.max(1, Math.round(amount * this.power.armor));
+    const damage = Math.max(1, Math.round(amount * this.power.armor * (this.power.takenDamageMult || 1)));
     this.hero.hp -= damage;
     this.hero.invulnerable = 0.62;
     this.hero.root.position.x += dx * 0.85;
     this.hero.root.position.z += dz * 0.85;
-    if (this.hero.root.position.length() > ARENA - 0.8) this.hero.root.position.setLength(ARENA - 0.8);
+    if (this.hero.root.position.length() > this.arenaRadius - 0.8) this.hero.root.position.setLength(this.arenaRadius - 0.8);
     this.hero.anim.play('hit', { once:true, speed:1.5, onDone:() => !this.hero.dead && this.hero.anim.play('idle') });
     this.ui.damageFlash.classList.remove('on');
     void this.ui.damageFlash.offsetWidth;
@@ -1186,8 +1557,10 @@ export class SurvivorGame {
         <div class="cards">${this.hand.map((card, i) => {
           const levelLabel = card.kind === 'attr'
             ? 'Điểm +1'
-            : `Cấp ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
-          return `<button class="card" data-card="${i}">
+            : card.kind === 'risk'
+              ? 'Rủi ro'
+              : `Cấp ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
+          return `<button class="card ${card.kind === 'risk' ? 'risk' : ''}" data-card="${i}">
             <span class="icon">${card.icon}</span><b>${card.name}</b>
             <small>${card.desc}</small>
             <em>${levelLabel}</em>
@@ -1213,7 +1586,10 @@ export class SurvivorGame {
     } else {
       this.upgradeLevels[card.id] = (this.upgradeLevels[card.id] || 0) + 1;
       card.apply(this);
-      this.toast(`${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
+      this.checkSynergies();
+      this.toast(card.kind === 'risk'
+        ? `${card.icon} ${card.name}`
+        : `${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
     }
     this.pendingLevels--;
     this.ui.modal.classList.add('hidden');
@@ -1332,9 +1708,12 @@ export class SurvivorGame {
       cache.seconds = seconds;
       this.ui.timer.textContent = this.formatTime(seconds);
     }
-    if (cache.stage !== this.stageIndex) {
-      cache.stage = this.stageIndex;
-      this.ui.stage.textContent = `MÀN ${this.stageIndex + 1}`;
+    const stageLabel = this.elapsed >= RING_START_AT
+      ? `VÒNG ${Math.round(this.arenaRadius)}`
+      : `MÀN ${this.stageIndex + 1}`;
+    if (cache.stageLabel !== stageLabel) {
+      cache.stageLabel = stageLabel;
+      this.ui.stage.textContent = stageLabel;
     }
     if (cache.kills !== this.kills) {
       cache.kills = this.kills;
@@ -1424,6 +1803,15 @@ export class SurvivorGame {
     this.ui.enemyIntro?.classList.add('hidden');
     for (const projectile of this.projectiles || []) this.removeProjectile(projectile);
     for (const pickup of this.pickups || []) this.releaseGem(pickup);
+    for (const drop of this.fieldDrops || []) {
+      this.scene?.remove(drop.mesh);
+      drop.mesh?.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+    }
+    this.fieldDrops = [];
+    this.ui.eventBanner?.classList.add('hidden');
     for (const pool of this.gemPool?.values?.() || []) {
       for (const mesh of pool) {
         mesh.geometry.dispose();

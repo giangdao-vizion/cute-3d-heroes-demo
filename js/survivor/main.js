@@ -25,6 +25,7 @@ const ui = {
   attrPointsLabel:$('attrPoints'),
   attrClose:$('attrClose'),
   enemyIntro:$('enemyIntro'),
+  eventBanner:$('eventBanner'),
   hint:$('hint'),
   joystick:$('joystick'),
   stick:$('stick'),
