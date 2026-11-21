@@ -49,6 +49,7 @@ function viewportSize() {
 
 function resize() {
   const { width, height } = viewportSize();
+  document.documentElement.style.setProperty('--app-height', `${height}px`);
   const canvas = $('c');
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;

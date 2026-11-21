@@ -38,89 +38,366 @@ const STAGES = [
 ];
 
 const GEM_TIERS = [
-  { min:10, color:0xffe066, accent:0xfff6c2, size:0.36 },
-  { min:6, color:0xff4d6d, accent:0xffb3c1, size:0.31 },
-  { min:3, color:0x38bdf8, accent:0xbae6fd, size:0.27 },
-  { min:1, color:0xa78bfa, accent:0xddd6fe, size:0.23 },
+  { min:10, color:0xffe066, accent:0xfff6c2, size:0.55 },
+  { min:6, color:0xff4d6d, accent:0xffb3c1, size:0.48 },
+  { min:3, color:0x38bdf8, accent:0xbae6fd, size:0.42 },
+  { min:1, color:0xa78bfa, accent:0xddd6fe, size:0.36 },
 ];
 
-/** Kim cương low-poly đứng yên — không xoay mỗi frame. */
-function createGemMesh(tier) {
-  const group = new THREE.Group();
-  const bodyMat = new THREE.MeshBasicMaterial({ color:tier.color, toneMapped:false });
-  const accentMat = new THREE.MeshBasicMaterial({ color:tier.accent, toneMapped:false });
-  const s = tier.size;
+/** Shared GPU assets: one texture/material per gem tier, reused by every drop. */
+const SHARED_PICKUPS = {
+  gemMats: new Map(),
+  potionMat: null,
+};
 
-  // Thân octahedron kéo dài = dáng kim cương 3D.
-  const body = new THREE.Mesh(new THREE.OctahedronGeometry(s, 0), bodyMat);
-  body.scale.set(0.92, 1.55, 0.92);
-  body.castShadow = false;
-  body.receiveShadow = false;
-
-  // Mặt bàn trên (table) — hình thoi.
-  const table = new THREE.Mesh(
-    new THREE.CylinderGeometry(s * 0.38, s * 0.58, s * 0.26, 4),
-    accentMat
-  );
-  table.position.y = s * 0.52;
-  table.rotation.y = Math.PI / 4;
-  table.castShadow = false;
-
-  // Đai giữa (girdle) cho rõ cạnh cắt.
-  const girdle = new THREE.Mesh(
-    new THREE.CylinderGeometry(s * 0.62, s * 0.62, s * 0.07, 4),
-    accentMat
-  );
-  girdle.position.y = s * 0.18;
-  girdle.rotation.y = Math.PI / 4;
-  girdle.castShadow = false;
-
-  group.add(body, table, girdle);
-  group.rotation.y = 0.55;
-  group.userData.pickupMats = [bodyMat, accentMat];
-  group.userData.pickupGeos = [body.geometry, table.geometry, girdle.geometry];
-  return group;
+function cssHex(hex) {
+  return `#${(hex >>> 0).toString(16).padStart(6, '0')}`;
 }
 
-/** Bình máu đứng yên — nhặt để hồi HP. */
-function createPotionMesh() {
-  const group = new THREE.Group();
-  const glass = new THREE.MeshBasicMaterial({ color:0xff5a7a, toneMapped:false });
-  const shine = new THREE.MeshBasicMaterial({ color:0xffd0da, toneMapped:false });
-  const cork = new THREE.MeshBasicMaterial({ color:0xb45309, toneMapped:false });
+function mixHex(a, b, t) {
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}
 
-  const flask = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.38, 8), glass);
-  flask.position.y = 0.22;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.14, 6), glass);
-  neck.position.y = 0.46;
-  const bub = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), shine);
-  bub.position.set(0.05, 0.26, 0.08);
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.07, 6), cork);
-  top.position.y = 0.56;
+function fillPoly(ctx, points, fill) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
 
-  for (const mesh of [flask, neck, bub, top]) {
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-    group.add(mesh);
+function strokePoly(ctx, points, stroke, width = 2) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = width;
+  ctx.stroke();
+}
+
+/** Vẽ kim cương kiểu SVG/facet rồi cache thành texture dùng chung. */
+function makeDiamondTexture(color, accent) {
+  const S = 160;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const main = cssHex(color);
+  const light = cssHex(accent);
+  const dark = cssHex(mixHex(color, 0x000000, 0.38));
+  const mid = cssHex(mixHex(color, accent, 0.28));
+  const deep = cssHex(mixHex(color, 0x000000, 0.55));
+
+  // Bóng dưới cho cảm giác đặt trên sàn.
+  const glow = ctx.createRadialGradient(80, 132, 2, 80, 132, 46);
+  glow.addColorStop(0, `${main}66`);
+  glow.addColorStop(1, `${main}00`);
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(80, 134, 42, 16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Các mặt cắt (facet) — nhìn như kim cương 3D phẳng đẹp.
+  fillPoly(ctx, [[80, 12], [118, 48], [80, 68], [42, 48]], light);           // table / top
+  fillPoly(ctx, [[80, 12], [42, 48], [28, 66], [80, 68]], dark);            // upper left
+  fillPoly(ctx, [[80, 12], [118, 48], [132, 66], [80, 68]], mid);           // upper right
+  fillPoly(ctx, [[28, 66], [80, 68], [80, 148]], deep);                    // pavilion left
+  fillPoly(ctx, [[132, 66], [80, 68], [80, 148]], dark);                   // pavilion right
+  fillPoly(ctx, [[42, 48], [80, 68], [118, 48]], `${light}cc`);            // crown highlight
+  fillPoly(ctx, [[64, 40], [80, 28], [96, 40], [80, 54]], '#ffffffaa');    // sparkle
+
+  strokePoly(ctx, [[80, 12], [118, 48], [132, 66], [80, 148], [28, 66], [42, 48]], 'rgba(255,255,255,0.65)', 2.4);
+  ctx.beginPath();
+  ctx.moveTo(80, 12); ctx.lineTo(80, 148);
+  ctx.moveTo(28, 66); ctx.lineTo(132, 66);
+  ctx.moveTo(42, 48); ctx.lineTo(80, 68); ctx.lineTo(118, 48);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+/** Bình máu kiểu RPG — silhouette chai rõ (nút bần to + cổ dày + bầu đỏ + ♥). */
+function makePotionTexture() {
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const cx = 128;
+
+  // Hào quang đỏ dưới chân.
+  const glow = ctx.createRadialGradient(cx, 228, 6, cx, 228, 72);
+  glow.addColorStop(0, 'rgba(239,68,68,0.6)');
+  glow.addColorStop(0.5, 'rgba(239,68,68,0.2)');
+  glow.addColorStop(1, 'rgba(239,68,68,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(cx, 230, 64, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Bầu bình (pear / round-flask) — phần lớn nhất, đỏ đậm.
+  const bulbGrad = ctx.createLinearGradient(60, 100, 200, 220);
+  bulbGrad.addColorStop(0, '#ffe4ea');
+  bulbGrad.addColorStop(0.3, '#ff6b81');
+  bulbGrad.addColorStop(0.65, '#e11d48');
+  bulbGrad.addColorStop(1, '#9f1239');
+  ctx.beginPath();
+  // Vai chai → bầu tròn dưới.
+  ctx.moveTo(98, 108);
+  ctx.bezierCurveTo(62, 118, 48, 160, 58, 190);
+  ctx.bezierCurveTo(68, 220, 188, 220, 198, 190);
+  ctx.bezierCurveTo(208, 160, 194, 118, 158, 108);
+  ctx.closePath();
+  ctx.fillStyle = bulbGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // Mặt nước.
+  ctx.beginPath();
+  ctx.ellipse(cx, 118, 42, 12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,200,210,0.5)';
+  ctx.fill();
+
+  // Cổ chai DÀY — nhìn rõ từ xa, không lẫn quả bóng.
+  const neckGrad = ctx.createLinearGradient(108, 40, 148, 120);
+  neckGrad.addColorStop(0, '#fecdd3');
+  neckGrad.addColorStop(0.45, '#fb7185');
+  neckGrad.addColorStop(1, '#be123c');
+  ctx.fillStyle = neckGrad;
+  ctx.beginPath();
+  ctx.moveTo(110, 112);
+  ctx.lineTo(110, 52);
+  ctx.quadraticCurveTo(110, 42, 128, 42);
+  ctx.quadraticCurveTo(146, 42, 146, 52);
+  ctx.lineTo(146, 112);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // Vai (shoulder) nối cổ–bầu.
+  ctx.beginPath();
+  ctx.moveTo(98, 108);
+  ctx.quadraticCurveTo(128, 100, 158, 108);
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Nút bần TO, nâu vàng — điểm nhận diện chai thuốc.
+  const corkGrad = ctx.createLinearGradient(100, 18, 156, 48);
+  corkGrad.addColorStop(0, '#fcd34d');
+  corkGrad.addColorStop(0.4, '#d97706');
+  corkGrad.addColorStop(1, '#78350f');
+  ctx.fillStyle = corkGrad;
+  ctx.beginPath();
+  ctx.roundRect(102, 16, 52, 30, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(110, 28); ctx.lineTo(146, 28);
+  ctx.moveTo(110, 36); ctx.lineTo(146, 36);
+  ctx.stroke();
+
+  // Highlight thủy tinh.
+  ctx.beginPath();
+  ctx.ellipse(84, 155, 11, 28, -0.4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(92, 130, 5, 10, -0.35, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.fill();
+
+  // Trái tim trắng lớn.
+  ctx.save();
+  ctx.translate(cx, 160);
+  ctx.scale(1.45, 1.35);
+  ctx.beginPath();
+  ctx.moveTo(0, 12);
+  ctx.bezierCurveTo(-20, -2, -20, -20, -9, -20);
+  ctx.bezierCurveTo(-3, -20, 0, -13, 0, -13);
+  ctx.bezierCurveTo(0, -13, 3, -20, 9, -20);
+  ctx.bezierCurveTo(20, -20, 20, -2, 0, 12);
+  ctx.closePath();
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = 'rgba(127,29,29,0.5)';
+  ctx.shadowBlur = 8;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.ellipse(cx - 7, 148, 4, 3, -0.4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function getGemMaterial(tier) {
+  const key = tier.color;
+  let mat = SHARED_PICKUPS.gemMats.get(key);
+  if (mat) return mat;
+  mat = new THREE.SpriteMaterial({
+    map: makeDiamondTexture(tier.color, tier.accent),
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  SHARED_PICKUPS.gemMats.set(key, mat);
+  return mat;
+}
+
+function getPotionMaterial() {
+  if (SHARED_PICKUPS.potionMat) return SHARED_PICKUPS.potionMat;
+  SHARED_PICKUPS.potionMat = new THREE.SpriteMaterial({
+    map: makePotionTexture(),
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  return SHARED_PICKUPS.potionMat;
+}
+
+function createGemMesh(tier) {
+  const sprite = new THREE.Sprite(getGemMaterial(tier));
+  sprite.scale.set(tier.size * 1.85, tier.size * 2.25, 1);
+  sprite.center.set(0.5, 0.08);
+  sprite.userData.sharedPickup = true;
+  return sprite;
+}
+
+function createPotionMesh(scale = 1.45) {
+  const sprite = new THREE.Sprite(getPotionMaterial());
+  // Cao hơn rộng — giữ tỉ lệ chai đứng, dễ nhận trên sân.
+  sprite.scale.set(scale * 0.9, scale * 1.35, 1);
+  sprite.center.set(0.5, 0.05);
+  sprite.userData.sharedPickup = true;
+  sprite.userData.potionScale = scale;
+  return sprite;
+}
+
+function disposeSharedPickups() {
+  for (const mat of SHARED_PICKUPS.gemMats.values()) {
+    mat.map?.dispose();
+    mat.dispose();
   }
-  group.userData.pickupMats = [glass, shine, cork];
-  group.userData.pickupGeos = [flask.geometry, neck.geometry, bub.geometry, top.geometry];
-  return group;
+  SHARED_PICKUPS.gemMats.clear();
+  if (SHARED_PICKUPS.potionMat) {
+    SHARED_PICKUPS.potionMat.map?.dispose();
+    SHARED_PICKUPS.potionMat.dispose();
+    SHARED_PICKUPS.potionMat = null;
+  }
+}
+
+/** Field-drop cleanup — bỏ qua SpriteMaterial/texture dùng chung. */
+function disposeFieldDropVisual(mesh) {
+  mesh?.traverse(obj => {
+    if (obj.isSprite || obj.userData?.sharedPickup) return;
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) obj.material.dispose();
+  });
+}
+
+function fmtPct(ratio) {
+  return `${Math.round(ratio * 100)}%`;
+}
+
+function fmtMult(ratio) {
+  const text = ratio.toFixed(2).replace(/\.?0+$/, '');
+  return `×${text}`;
 }
 
 /** Chỉ số cơ bản — cộng bằng điểm thuộc tính trong bảng nhân vật. */
 const ATTR_DEFS = [
-  { id:'str', icon:'⚔', name:'Sức mạnh', desc:'+12% sát thương mỗi điểm', max:12 },
-  { id:'agi', icon:'👟', name:'Tốc độ', desc:'+8% tốc độ chạy mỗi điểm', max:12 },
-  { id:'vit', icon:'♥', name:'Sinh lực', desc:'+22 máu tối đa mỗi điểm', max:12 },
-  { id:'def', icon:'⬟', name:'Phòng thủ', desc:'Giảm 6% sát thương nhận mỗi điểm', max:10 },
-  { id:'cri', icon:'✴', name:'Chí mạng', desc:'+4% tỉ lệ chí mạng mỗi điểm', max:10 },
-  { id:'vamp', icon:'🩸', name:'Hút máu', desc:'Hồi 2% sát thương gây ra mỗi điểm', max:8 },
-  { id:'pull', icon:'🧲', name:'Hút ngọc', desc:'+10% tầm hút ngọc mỗi điểm', max:8 },
-  { id:'luck', icon:'🍀', name:'May mắn', desc:'+8% XP ngọc & vật phẩm map xuất hiện nhanh hơn', max:8 },
-  { id:'regen', icon:'🌿', name:'Hồi phục', desc:'+0.45 máu/giây mỗi điểm khi không vừa bị đánh', max:8 },
-  { id:'mass', icon:'🪨', name:'Khối lượng', desc:'Giảm 8% đẩy lùi mỗi điểm', max:8 },
-  { id:'elite', icon:'👑', name:'Tinh anh', desc:'+8% sát thương lên boss/elite mỗi điểm', max:10 },
+  {
+    id:'str', icon:'⚔', name:'Sức mạnh', max:12,
+    desc:'Mỗi điểm +12% sát thương gây ra',
+    value:g => `Hiện tại ${fmtMult(1 + (g.attrs.str || 0) * 0.12)} sát thương`,
+  },
+  {
+    id:'agi', icon:'👟', name:'Tốc độ', max:12,
+    desc:'Mỗi điểm +8% tốc độ chạy',
+    value:g => {
+      const mult = 1 + (g.attrs.agi || 0) * 0.08;
+      const speed = (g.hero?.baseSpeed || 0) * mult;
+      return `Hiện tại ${speed.toFixed(1)} tốc chạy (${fmtMult(mult)})`;
+    },
+  },
+  {
+    id:'vit', icon:'♥', name:'Sinh lực', max:12,
+    desc:'Mỗi điểm +22 máu tối đa',
+    value:g => `Hiện tại ${Math.round(g.hero?.maxHp || 0)} máu tối đa`,
+  },
+  {
+    // Giáp lũy tiến: mỗi điểm nhận thêm ×0.94 sát thương — không bao giờ về 0.
+    id:'def', icon:'⬟', name:'Phòng thủ', max:10,
+    desc:'Mỗi điểm nhận thêm ×0.94 sát thương (giảm dần, không miễn nhiễm)',
+    value:g => {
+      const keep = Math.pow(0.94, g.attrs.def || 0);
+      return `Hiện tại nhận ${fmtPct(keep)} sát thương (−${fmtPct(1 - keep)})`;
+    },
+  },
+  {
+    id:'cri', icon:'✴', name:'Chí mạng', max:10,
+    desc:'Mỗi điểm +4% tỉ lệ chí mạng (tối đa 55%)',
+    value:g => {
+      const chance = Math.min(0.55, (g.attrs.cri || 0) * 0.04);
+      const mult = 1.55 + (g.attrs.cri || 0) * 0.03;
+      return `Hiện tại ${fmtPct(chance)} chí mạng · ${fmtMult(mult)}`;
+    },
+  },
+  {
+    id:'vamp', icon:'🩸', name:'Hút máu', max:8,
+    desc:'Mỗi điểm hồi 2% sát thương gây ra',
+    value:g => `Hiện tại hút ${fmtPct((g.attrs.vamp || 0) * 0.02)} sát thương gây ra`,
+  },
+  {
+    id:'pull', icon:'🧲', name:'Hút ngọc', max:8,
+    desc:'Mỗi điểm +10% tầm hút ngọc',
+    value:g => `Hiện tại tầm hút ${fmtMult(1 + (g.attrs.pull || 0) * 0.1)}`,
+  },
+  {
+    id:'luck', icon:'🍀', name:'May mắn', max:8,
+    desc:'Mỗi điểm +8% XP từ ngọc & vật phẩm map nhanh hơn',
+    value:g => `Hiện tại XP ngọc ${fmtMult(1 + (g.attrs.luck || 0) * 0.08)}`,
+  },
+  {
+    id:'regen', icon:'🌿', name:'Hồi phục', max:8,
+    desc:'Mỗi điểm +0.45 máu/giây khi không vừa bị đánh',
+    value:g => `Hiện tại +${((g.attrs.regen || 0) * 0.45).toFixed(2)} máu/giây`,
+  },
+  {
+    id:'mass', icon:'🪨', name:'Khối lượng', max:8,
+    desc:'Mỗi điểm giảm 8% đẩy lùi (tối đa 75%)',
+    value:g => `Hiện tại giảm đẩy lùi ${fmtPct(Math.min(0.75, (g.attrs.mass || 0) * 0.08))}`,
+  },
+  {
+    id:'elite', icon:'👑', name:'Tinh anh', max:10,
+    desc:'Mỗi điểm +8% sát thương lên boss/elite',
+    value:g => `Hiện tại ${fmtMult(1 + (g.attrs.elite || 0) * 0.08)} lên boss/elite`,
+  },
 ];
 
 /** Phần thưởng lên cấp: kỹ năng bổ trợ (không gồm chỉ số cơ bản). */
@@ -135,6 +412,11 @@ const SPECIAL_UPGRADES = [
   { id:'blast', icon:'✹', name:'Nổ lan', desc:'Fireball gây nổ quanh mục tiêu', max:4, apply:g => { g.power.blast++; } },
   { id:'freeze', icon:'❄', name:'Băng giá', desc:'Làm chậm, có cơ hội đóng băng quái', max:4, apply:g => { g.power.freeze++; } },
   { id:'burnAura', icon:'🔥', name:'Vòng lửa', desc:'Thiêu đốt quái đi vào vòng quanh bạn', max:5, apply:g => { g.power.burnAura++; g.updateBurnAura(); } },
+  {
+    id:'orbit', icon:'🌀', name:'Vòng xoáy',
+    desc:'3 vòng bay quanh bạn · cấp cao bay xa & sát thương mạnh hơn',
+    max:5, apply:g => { g.power.orbit++; g.updateOrbit(); },
+  },
 ];
 
 /** Thẻ rủi ro: mạnh hơn nhưng có đánh đổi. */
@@ -206,7 +488,7 @@ const BOSS_EVENTS = [
 
 const FIELD_DROPS = [
   { id:'fieldAttr', icon:'◎', color:0xa78bfa, name:'Điểm thuộc tính', apply:g => { g.attrPoints++; g.updateAttrBadge(); g.renderAttrRows(); } },
-  { id:'fieldHeal', icon:'♥', color:0x22c55e, name:'Hồi máu', apply:g => { g.hero.hp = Math.min(g.hero.maxHp, g.hero.hp + Math.round(g.hero.maxHp * 0.28)); } },
+  { id:'fieldHeal', icon:'🧪', color:0xef4444, name:'Bình máu', apply:g => { g.grantHealthPotion(Math.round(g.hero.maxHp * 0.28)); } },
   { id:'fieldXp', icon:'✦', color:0xfbbf24, name:'Bùng nổ XP', apply:g => { g.grantXp(14); } },
   { id:'fieldShield', icon:'⛨', color:0x60a5fa, name:'Khiên tạm', apply:g => { g.hero.invulnerable = Math.max(g.hero.invulnerable, 2.4); } },
   { id:'fieldRage', icon:'⚔', color:0xef4444, name:'Nộ chiến', apply:g => { g.tempBuffs.damage = { t:9, mult:1.4 }; } },
@@ -357,8 +639,10 @@ export class SurvivorGame {
     this.power = {
       damage:1, damageBonus:1, interval:0.72, multi:1, pierce:0, size:1,
       magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
-      chain:0, blast:0, freeze:0, burnAura:0, takenDamageMult:1,
+      chain:0, blast:0, freeze:0, burnAura:0, orbit:0, takenDamageMult:1,
     };
+    this.orbitAngle = 0;
+    this.orbitTick = 0;
 
     const heroEntry = byId[selection.hero] || byId.Knight;
     onProgress(0.25, `Đang tải ${heroEntry.name}`);
@@ -375,6 +659,7 @@ export class SurvivorGame {
     this.updateRangeRing();
     this.updateMagnetRing();
     this.updateBurnAura();
+    this.updateOrbit();
     this.renderAttrRows();
     this.updateAttrBadge();
 
@@ -391,8 +676,9 @@ export class SurvivorGame {
     await Promise.all([this.spawnEnemy('sprout'), this.spawnEnemy('sprout')]);
     if (runId !== this.runId) return;
 
-    this.camera.position.set(0, 13, 10);
-    this.camera.lookAt(0, 0.6, 0);
+    this.updateCameraFit();
+    this.camera.position.set(0, this.camFit.height, this.camFit.offset);
+    this.camera.lookAt(0, 0.55, 0);
     this.state = 'playing';
     this.ui.hud.classList.remove('hidden');
     this.ui.modal.classList.add('hidden');
@@ -540,7 +826,8 @@ export class SurvivorGame {
     rangeRing.position.y = 0.035;
     this.hero.root.add(rangeRing);
     this.hero.rangeRing = rangeRing;
-    this.updateCameraFov();
+    // Chỉ fit lại camera khi tầm bắn đổi.
+    this.updateCameraFit();
   }
 
   updateMagnetRing() {
@@ -652,12 +939,185 @@ export class SurvivorGame {
     }
   }
 
-  updateCameraFov() {
+  orbitRadius() {
+    const level = this.power.orbit || 0;
+    if (level <= 0) return 0;
+    // Cấp cao → bay xa hơn quanh hero.
+    return 1.35 + level * 0.48;
+  }
+
+  orbitOrbHitRadius() {
+    const level = this.power.orbit || 0;
+    if (level <= 0) return 0;
+    return 0.42 + level * 0.05;
+  }
+
+  orbitDps() {
+    const level = this.power.orbit || 0;
+    if (level <= 0) return 0;
+    return (7.2 + level * 3.4) * this.power.damage * (this.tempBuffs.damage?.mult || 1);
+  }
+
+  clearOrbit() {
+    if (!this.hero?.orbitGroup) return;
+    this.hero.root.remove(this.hero.orbitGroup);
+    if (this.hero.orbitPath) {
+      this.hero.orbitPath.geometry.dispose();
+      this.hero.orbitPath.material.dispose();
+    }
+    const shared = this.hero.orbitShared;
+    if (shared) {
+      shared.orbGeo?.dispose();
+      shared.orbMat?.dispose();
+      shared.coreGeo?.dispose();
+      shared.coreMat?.dispose();
+    }
+    this.hero.orbitGroup = null;
+    this.hero.orbitOrbs = null;
+    this.hero.orbitPath = null;
+    this.hero.orbitShared = null;
+  }
+
+  updateOrbit() {
+    if (!this.hero) return;
+    this.clearOrbit();
+    const level = this.power.orbit || 0;
+    if (level <= 0) return;
+
+    const radius = this.orbitRadius();
+    const group = new THREE.Group();
+    group.name = 'orbitSwirl';
+
+    // Vệt quỹ đạo mờ trên sàn — gợi phạm vi bay.
+    const path = new THREE.Mesh(
+      new THREE.RingGeometry(Math.max(0.12, radius - 0.08), radius + 0.08, 56),
+      new THREE.MeshBasicMaterial({
+        color:0x7dd3fc, transparent:true, opacity:0.22, depthWrite:false,
+        blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
+      })
+    );
+    path.rotation.x = -Math.PI / 2;
+    path.position.y = 0.04;
+    group.add(path);
+
+    // Một geometry/material dùng chung cho 3 vòng — tối ưu giống gem shared.
+    const orbGeo = new THREE.TorusGeometry(0.28, 0.09, 10, 22);
+    const orbMat = new THREE.MeshBasicMaterial({
+      color:0x38bdf8, transparent:true, opacity:0.92, depthWrite:false,
+      blending:THREE.AdditiveBlending,
+    });
+    const coreGeo = new THREE.SphereGeometry(0.14, 12, 10);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color:0xe0f2fe, transparent:true, opacity:0.95, depthWrite:false,
+      blending:THREE.AdditiveBlending,
+    });
+
+    const orbs = [];
+    for (let i = 0; i < 3; i++) {
+      const pivot = new THREE.Group();
+      const torus = new THREE.Mesh(orbGeo, orbMat);
+      torus.rotation.x = Math.PI / 2;
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      pivot.add(torus, core);
+      pivot.position.y = 0.72;
+      group.add(pivot);
+      orbs.push(pivot);
+    }
+
+    this.hero.root.add(group);
+    this.hero.orbitGroup = group;
+    this.hero.orbitOrbs = orbs;
+    this.hero.orbitPath = path;
+    this.hero.orbitShared = { orbGeo, orbMat, coreGeo, coreMat };
+    this.syncOrbitPositions(this.orbitAngle || 0);
+  }
+
+  syncOrbitPositions(angle) {
+    const orbs = this.hero?.orbitOrbs;
+    if (!orbs?.length) return;
+    const radius = this.orbitRadius();
+    const spin = this.elapsed * 6;
+    for (let i = 0; i < orbs.length; i++) {
+      const a = angle + (i * Math.PI * 2) / 3;
+      const orb = orbs[i];
+      orb.position.x = Math.cos(a) * radius;
+      orb.position.z = Math.sin(a) * radius;
+      orb.position.y = 0.68 + Math.sin(spin + i * 1.7) * 0.08;
+      // Xoay cục bộ cho cảm giác “vòng xoáy”.
+      orb.rotation.y = a + Math.PI / 2;
+      orb.children[0].rotation.z = spin * 1.4 + i;
+    }
+    if (this.hero.orbitPath) {
+      const pulse = 0.94 + Math.sin(this.elapsed * 4.2) * 0.06;
+      this.hero.orbitPath.scale.set(pulse, pulse, pulse);
+      this.hero.orbitPath.material.opacity = 0.16 + Math.sin(this.elapsed * 3.5) * 0.06;
+    }
+  }
+
+  updateOrbitCombat(dt) {
+    const level = this.power.orbit || 0;
+    if (level <= 0 || !this.hero?.orbitOrbs?.length) return;
+
+    // Bay nhanh hơn mỗi cấp.
+    const speed = 2.4 + level * 0.35;
+    this.orbitAngle = (this.orbitAngle || 0) + speed * dt;
+    this.syncOrbitPositions(this.orbitAngle);
+
+    this.orbitTick -= dt;
+    if (this.orbitTick > 0) return;
+    this.orbitTick = 0.14;
+
+    const hitR = this.orbitOrbHitRadius();
+    const hitRSq = hitR * hitR;
+    const damage = this.orbitDps() * 0.14;
+    const heroPos = this.hero.root.position;
+    const orbs = this.hero.orbitOrbs;
+
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const ex = enemy.root.position.x;
+      const ez = enemy.root.position.z;
+      for (const orb of orbs) {
+        const ox = heroPos.x + orb.position.x;
+        const oz = heroPos.z + orb.position.z;
+        const dx = ex - ox;
+        const dz = ez - oz;
+        if (dx * dx + dz * dz <= hitRSq) {
+          this.hitEnemy(enemy, damage);
+          break;
+        }
+      }
+    }
+  }
+
+  /**
+   * Fit camera để đường kính vòng tầm bắn ≈ 90% chiều ngang màn hình.
+   * FOV giữ ổn định (chỉ đổi portrait/landscape); khoảng cách camera đổi theo range.
+   */
+  updateCameraFit() {
     if (!this.camera || !this.power) return;
-    const baseFov = innerHeight > innerWidth ? 50 : 45;
-    const rangeRatio = Math.max(1, this.power.range / BASE_ATTACK_RANGE);
-    this.camera.fov = baseFov + Math.min(16, (rangeRatio - 1) * 16);
-    this.camera.updateProjectionMatrix();
+    const portrait = innerHeight > innerWidth;
+    const aspect = Math.max(0.35, innerWidth / Math.max(1, innerHeight));
+    const fov = portrait ? 50 : 45;
+    if (this.camera.fov !== fov) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    } else {
+      this.camera.updateProjectionMatrix();
+    }
+
+    const range = Math.max(1, this.power.range || BASE_ATTACK_RANGE);
+    const vFovRad = THREE.MathUtils.degToRad(fov);
+    const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
+    // 2R = 0.9 * visibleWidth → halfVisible = R / 0.9 = dist * tan(hFov/2)
+    const RANGE_SCREEN_FRACTION = 0.9;
+    const dist = (range / RANGE_SCREEN_FRACTION) / Math.max(1e-4, Math.tan(hFovRad / 2));
+
+    // Giữ góc nhìn cũ (cao / lùi) — chỉ scale khoảng cách.
+    const k = portrait ? 17 / 12.5 : 13 / 10;
+    const offset = Math.sqrt((dist * dist) / (k * k + 1));
+    const height = k * offset;
+    this.camFit = { height, offset, fov, range };
   }
 
   variantStats(variant, stageIndex = this.stageIndex) {
@@ -705,6 +1165,8 @@ export class SurvivorGame {
     enemy.slowT = 0;
     enemy.slowFactor = 1;
     enemy.paralyzeT = 0;
+    enemy.vx = 0;
+    enemy.vz = 0;
     enemy.isElite = variantId === 'sproutBrute' || variantId === 'skeletonGuard' || variantId === 'skeletonRaider';
     const heroPos = this.hero?.root.position || tmp.set(0,0,0);
     let placed = false;
@@ -735,6 +1197,7 @@ export class SurvivorGame {
       this.updateHero(dt);
       this.updateRegen(dt);
       this.updateBurnAuraCombat(dt);
+      this.updateOrbitCombat(dt);
       this.updateSpawner(dt);
       this.updateBossEvents();
       this.updateSafeRing(dt);
@@ -807,12 +1270,13 @@ export class SurvivorGame {
       const level = this.attrs[def.id] || 0;
       const full = level >= def.max;
       const can = this.attrPoints > 0 && !full;
+      const current = typeof def.value === 'function' ? def.value(this) : '';
       return `<div class="attr-row">
         <div class="attr-icon">${def.icon}</div>
         <div class="attr-copy">
-          <b>${def.name}</b>
+          <b>${def.name} <span class="attr-lv">Cấp ${level}/${def.max}</span></b>
+          <strong class="attr-now">${current}</strong>
           <small>${def.desc}</small>
-          <em>Cấp ${level}/${def.max}</em>
         </div>
         <button class="attr-plus" type="button" data-attr="${def.id}" ${can ? '' : 'disabled'} aria-label="Cộng ${def.name}">+</button>
       </div>`;
@@ -873,6 +1337,7 @@ export class SurvivorGame {
     const risks = RISK_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
     const hand = [];
     const seen = new Set();
+    let riskPicked = 0;
     const pool = [...specials, ...risks];
     if (this.canSpendAnyAttr()) {
       // Bias lightly toward offering an attribute point each level-up.
@@ -885,22 +1350,25 @@ export class SurvivorGame {
       }
     }
     shuffle(pool);
-    for (const card of pool) {
-      if (hand.length >= 3) break;
-      if (seen.has(card.id)) continue;
+
+    const tryAdd = (card) => {
+      if (hand.length >= 3 || seen.has(card.id)) return;
+      // Trong 3 lựa chọn chỉ được tối đa 1 thẻ rủi ro.
+      if (card.kind === 'risk') {
+        if (riskPicked >= 1) return;
+        riskPicked++;
+      }
       seen.add(card.id);
       hand.push(card);
-    }
+    };
+
+    for (const card of pool) tryAdd(card);
     if (hand.length < 3 && this.canSpendAnyAttr() && !seen.has(ATTR_POINT_CARD.id)) {
-      seen.add(ATTR_POINT_CARD.id);
-      hand.push(ATTR_POINT_CARD);
+      tryAdd(ATTR_POINT_CARD);
     }
-    for (const card of [...specials, ...risks]) {
-      if (hand.length >= 3) break;
-      if (seen.has(card.id)) continue;
-      seen.add(card.id);
-      hand.push(card);
-    }
+    // Bù thiếu bằng skill thường / điểm thuộc tính — không thêm rủi ro thứ hai.
+    for (const card of specials) tryAdd(card);
+    if (hand.length < 3 && this.canSpendAnyAttr()) tryAdd(ATTR_POINT_CARD);
     if (!hand.length) {
       hand.push({
         id:'overflowDamage',
@@ -1039,6 +1507,8 @@ export class SurvivorGame {
     enemy.slowT = 0;
     enemy.slowFactor = 1;
     enemy.paralyzeT = 0;
+    enemy.vx = 0;
+    enemy.vz = 0;
     enemy.bossCd = 2.5;
     enemy.telegraphT = 0;
     enemy.chargeT = 0;
@@ -1065,15 +1535,19 @@ export class SurvivorGame {
     for (const drop of this.fieldDrops) {
       drop.life -= dt;
       drop.phase += dt * 3.2;
-      drop.mesh.rotation.y += dt * 2.4;
+      // Sprite bình máu tự billboard — chỉ nhún, không xoay group.
+      if (!drop.isPotion) drop.mesh.rotation.y += dt * 2.4;
       drop.mesh.position.y = 0.55 + Math.sin(drop.phase) * 0.12;
-      drop.halo.material.opacity = 0.35 + Math.sin(drop.phase * 1.4) * 0.2;
+      if (drop.halo?.material) {
+        drop.halo.material.opacity = 0.35 + Math.sin(drop.phase * 1.4) * 0.2;
+      }
       if (drop.life < 4) drop.mesh.scale.setScalar(0.75 + Math.sin(drop.phase * 8) * 0.12);
       const dx = drop.mesh.position.x - this.hero.root.position.x;
       const dz = drop.mesh.position.z - this.hero.root.position.z;
       if (dx * dx + dz * dz < (this.hero.radius + 0.7) ** 2) {
         drop.def.apply(this);
-        this.toast(`${drop.def.icon} ${drop.def.name}`);
+        // fieldHeal đã toast qua grantHealthPotion — tránh báo trùng.
+        if (drop.def.id !== 'fieldHeal') this.toast(`${drop.def.icon} ${drop.def.name}`);
         this.flashEvent(`${drop.def.icon} Nhặt được: ${drop.def.name}`, 2.4);
         drop.dead = true;
         this.updateHud();
@@ -1084,10 +1558,7 @@ export class SurvivorGame {
     for (const drop of this.fieldDrops) {
       if (!drop.dead) continue;
       this.scene.remove(drop.mesh);
-      drop.mesh.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
-      });
+      disposeFieldDropVisual(drop.mesh);
     }
     this.fieldDrops = this.fieldDrops.filter(drop => !drop.dead);
   }
@@ -1101,16 +1572,32 @@ export class SurvivorGame {
     }
     const life = 15 + Math.random() * 15;
     const group = new THREE.Group();
-    const core = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.38, 0),
-      new THREE.MeshBasicMaterial({ color:def.color, toneMapped:false })
-    );
-    const halo = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.68, 28),
-      new THREE.MeshBasicMaterial({ color:def.color, transparent:true, opacity:0.5, depthWrite:false, side:THREE.DoubleSide })
-    );
+    let halo = null;
+    if (def.id === 'fieldHeal') {
+      // Dùng chung sprite bình máu — nhận diện ngay, không còn khối lục diện xanh.
+      const potion = createPotionMesh(1.65);
+      potion.position.y = 0.18;
+      group.add(potion);
+      halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.55, 0.78, 28),
+        new THREE.MeshBasicMaterial({
+          color:0xef4444, transparent:true, opacity:0.55, depthWrite:false, side:THREE.DoubleSide,
+        })
+      );
+    } else {
+      const core = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.38, 0),
+        new THREE.MeshBasicMaterial({ color:def.color, toneMapped:false })
+      );
+      group.add(core);
+      halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.5, 0.68, 28),
+        new THREE.MeshBasicMaterial({
+          color:def.color, transparent:true, opacity:0.5, depthWrite:false, side:THREE.DoubleSide,
+        })
+      );
+    }
     halo.rotation.x = -Math.PI / 2;
-    group.add(core);
     group.add(halo);
     let placed = false;
     for (let i = 0; i < 20; i++) {
@@ -1129,7 +1616,11 @@ export class SurvivorGame {
       group.position.set(Math.cos(a) * (this.arenaRadius * 0.55), 0.55, Math.sin(a) * (this.arenaRadius * 0.55));
     }
     this.scene.add(group);
-    this.fieldDrops.push({ mesh:group, halo, def, life, phase:Math.random() * 6, dead:false });
+    this.fieldDrops.push({
+      mesh:group, halo, def, life,
+      phase:Math.random() * 6, dead:false,
+      isPotion: def.id === 'fieldHeal',
+    });
     this.flashEvent(`${def.icon} Phần thưởng xuất hiện trên bản đồ!`, 2.8);
   }
 
@@ -1486,7 +1977,7 @@ export class SurvivorGame {
       let dx = heroPos.x - pos.x;
       let dz = heroPos.z - pos.z;
       let distance = Math.max(0.001, Math.hypot(dx, dz));
-      // Separation as velocity (× dt). Instant position shoves looked like diagonal stutter.
+      // Soft separation + velocity lerp — tránh giật khi đám đông chen nhau.
       let sepX = 0;
       let sepZ = 0;
 
@@ -1499,7 +1990,7 @@ export class SurvivorGame {
             const ox = pos.x - other.root.position.x;
             const oz = pos.z - other.root.position.z;
             const odSq = ox * ox + oz * oz;
-            const minimum = (enemy.radius + other.radius) * 0.72;
+            const minimum = (enemy.radius + other.radius) * 0.62;
             if (odSq > 1e-6 && odSq < minimum * minimum) {
               const od = Math.sqrt(odSq);
               const push = (minimum - od) / od;
@@ -1510,11 +2001,21 @@ export class SurvivorGame {
         }
       }
 
+      const sepLen = Math.hypot(sepX, sepZ);
+      const sepCap = enemy.speed * 1.15;
+      if (sepLen > sepCap) {
+        const s = sepCap / sepLen;
+        sepX *= s;
+        sepZ *= s;
+      }
+
       const moveScale = enemy.paralyzeT > 0 ? 0 : enemy.slowT > 0 ? enemy.slowFactor : 1;
       if (enemy.isBoss) {
         enemy.bossCd = Math.max(0, (enemy.bossCd || 0) - dt);
         if (enemy.telegraphT > 0) {
           enemy.telegraphT -= dt;
+          enemy.vx = 0;
+          enemy.vz = 0;
           enemy.anim.play('idle');
           enemy.ring.material.color.setHex(0xfde047);
           if (enemy.telegraphT <= 0) {
@@ -1524,9 +2025,11 @@ export class SurvivorGame {
           }
         } else if (enemy.chargeT > 0) {
           enemy.chargeT -= dt;
-          pos.x += enemy.chargeDir.x * enemy.speed * 2.8 * dt;
-          pos.z += enemy.chargeDir.z * enemy.speed * 2.8 * dt;
-          this.faceTo(enemy, pos.x + enemy.chargeDir.x, pos.z + enemy.chargeDir.z, dt, 14);
+          enemy.vx = enemy.chargeDir.x * enemy.speed * 2.8;
+          enemy.vz = enemy.chargeDir.z * enemy.speed * 2.8;
+          pos.x += enemy.vx * dt;
+          pos.z += enemy.vz * dt;
+          this.faceTo(enemy, pos.x + enemy.chargeDir.x, pos.z + enemy.chargeDir.z, dt, 12);
           enemy.anim.play('run');
           enemy.ring.material.color.setHex(0xef4444);
         } else if (enemy.bossCd <= 0 && moveScale > 0) {
@@ -1536,12 +2039,16 @@ export class SurvivorGame {
       if (!(enemy.isBoss && (enemy.telegraphT > 0 || enemy.chargeT > 0))) {
         const seekX = dx / distance * enemy.speed * moveScale;
         const seekZ = dz / distance * enemy.speed * moveScale;
-        const moveX = seekX + sepX * (enemy.isBoss ? 1.2 : 3.4);
-        const moveZ = seekZ + sepZ * (enemy.isBoss ? 1.2 : 3.4);
-        pos.x += moveX * dt;
-        pos.z += moveZ * dt;
-        if (moveX * moveX + moveZ * moveZ > 0.04) this.faceTo(enemy, pos.x + moveX, pos.z + moveZ, dt, 10);
-        else this.faceTo(enemy, heroPos.x, heroPos.z, dt, 8);
+        const wantX = seekX + sepX * (enemy.isBoss ? 0.85 : 1.8);
+        const wantZ = seekZ + sepZ * (enemy.isBoss ? 0.85 : 1.8);
+        const blend = 1 - Math.exp(-10 * dt);
+        enemy.vx = (enemy.vx || 0) + (wantX - (enemy.vx || 0)) * blend;
+        enemy.vz = (enemy.vz || 0) + (wantZ - (enemy.vz || 0)) * blend;
+        pos.x += enemy.vx * dt;
+        pos.z += enemy.vz * dt;
+        const speedSq = enemy.vx * enemy.vx + enemy.vz * enemy.vz;
+        if (speedSq > 0.04) this.faceTo(enemy, pos.x + enemy.vx, pos.z + enemy.vz, dt, 7);
+        else this.faceTo(enemy, heroPos.x, heroPos.z, dt, 6);
         enemy.anim.play(moveScale > 0 ? 'run' : 'idle');
       }
       if (pos.length() > this.arenaRadius - 0.6) pos.setLength(this.arenaRadius - 0.6);
@@ -1692,8 +2199,9 @@ export class SurvivorGame {
     if (!mesh) mesh = createGemMesh(tier);
     mesh.visible = true;
     mesh.position.copy(position);
-    mesh.position.y = 0.42;
-    mesh.scale.setScalar(1);
+    mesh.position.y = 0.28;
+    // Sprite scale = kích thước pixel trên thế giới (shared material, không clone).
+    mesh.scale.set(tier.size * 1.85, tier.size * 2.25, 1);
     this.scene.add(mesh);
     this.pickups.push({ kind:'gem', mesh, value, tier, poolKey:key, age:0, collected:false });
   }
@@ -1706,11 +2214,12 @@ export class SurvivorGame {
       this.gemPool.set(key, pool);
     }
     let mesh = pool.pop();
-    if (!mesh) mesh = createPotionMesh();
+    if (!mesh) mesh = createPotionMesh(1.45);
     mesh.visible = true;
     mesh.position.copy(position);
-    mesh.position.y = 0.08;
-    mesh.scale.setScalar(1);
+    mesh.position.y = 0.16;
+    const s = mesh.userData.potionScale || 1.45;
+    mesh.scale.set(s * 0.9, s * 1.35, 1);
     this.scene.add(mesh);
     this.pickups.push({ kind:'potion', mesh, healPct, poolKey:key, age:0, collected:false });
   }
@@ -1719,14 +2228,14 @@ export class SurvivorGame {
     const heroPos = this.hero.root.position;
     for (const pickup of this.pickups) {
       pickup.age += dt;
-      // Đứng yên — chỉ dịch chuyển khi bị nam châm hút.
+      // Sprite billboard — chỉ hút nam châm, không xoay mesh.
       const dx = pickup.mesh.position.x - heroPos.x;
       const dz = pickup.mesh.position.z - heroPos.z;
       const distanceSq = dx * dx + dz * dz;
       const magnet = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
       if (distanceSq < magnet * magnet) {
         const distance = Math.sqrt(distanceSq) || 0.001;
-        const y = pickup.kind === 'potion' ? 0.08 : 0.42;
+        const y = pickup.kind === 'potion' ? 0.14 : 0.28;
         pickup.mesh.position.lerp(tmp2.set(heroPos.x, y, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
       }
       if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectPickup(pickup);
@@ -1740,10 +2249,7 @@ export class SurvivorGame {
     pickup.mesh.visible = false;
     const pool = this.gemPool?.get(pickup.poolKey);
     if (pool) pool.push(pickup.mesh);
-    else {
-      for (const geometry of pickup.mesh.userData.pickupGeos || pickup.mesh.userData.gemGeos || []) geometry.dispose();
-      for (const material of pickup.mesh.userData.pickupMats || pickup.mesh.userData.gemMats || []) material.dispose();
-    }
+    // Shared SpriteMaterial/texture — không dispose theo từng instance.
   }
 
   collectPickup(pickup) {
@@ -1764,10 +2270,24 @@ export class SurvivorGame {
     pickup.collected = true;
     this.releaseGem(pickup);
     const heal = Math.max(12, Math.round(this.hero.maxHp * (pickup.healPct || 0.18)));
-    const before = this.hero.hp;
-    this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + heal);
-    const gained = Math.round(this.hero.hp - before);
-    if (gained > 0) this.toast(`♥ +${gained} máu`);
+    this.grantHealthPotion(heal);
+  }
+
+  /** Hồi máu; nếu đã đầy thì +1 giới hạn máu (baseMaxHp) thay vì bỏ phí. */
+  grantHealthPotion(healAmount) {
+    const hero = this.hero;
+    if (!hero) return;
+    if (hero.hp >= hero.maxHp - 0.001) {
+      hero.baseMaxHp += 1;
+      hero.maxHp += 1;
+      hero.hp = hero.maxHp;
+      this.toast('♥ +1 giới hạn máu');
+    } else {
+      const before = hero.hp;
+      hero.hp = Math.min(hero.maxHp, hero.hp + Math.max(1, healAmount));
+      const gained = Math.round(hero.hp - before);
+      if (gained > 0) this.toast(`♥ +${gained} máu`);
+    }
     this.updateHud();
   }
 
@@ -1902,14 +2422,8 @@ export class SurvivorGame {
 
   updateCamera(dt) {
     const pos = this.hero.root.position;
-    const portrait = innerHeight > innerWidth;
-    const rangeRatio = Math.max(1, this.power.range / BASE_ATTACK_RANGE);
-    const aspect = innerWidth / Math.max(1, innerHeight);
-    const narrowPhoneScale = portrait ? Math.max(1, 0.47 / aspect) : 1;
-    // Camera lùi theo đúng tầm bắn và bù thêm cho điện thoại rất dài/hẹp.
-    const viewScale = 1.38 * rangeRatio * narrowPhoneScale;
-    const height = (portrait ? 17 : 13) * viewScale;
-    const offset = (portrait ? 12.5 : 10) * viewScale;
+    if (!this.camFit) this.updateCameraFit();
+    const { height, offset } = this.camFit;
     tmp.set(pos.x, height, pos.z + offset);
     this.camera.position.lerp(tmp, Math.min(1, dt * 5));
     this.camera.lookAt(this.camera.position.x, 0.55, this.camera.position.z - offset);
@@ -1974,8 +2488,8 @@ export class SurvivorGame {
 
   resize(width, height) {
     if (!this.camera) return;
-    this.camera.aspect = width / height;
-    this.updateCameraFov();
+    this.camera.aspect = width / Math.max(1, height);
+    this.updateCameraFit();
     this.updateEnemyLabels();
   }
 
@@ -2023,6 +2537,24 @@ export class SurvivorGame {
       }
       unit.burnRings = [];
     }
+    if (unit.orbitGroup) {
+      unit.root.remove(unit.orbitGroup);
+      if (unit.orbitPath) {
+        unit.orbitPath.geometry.dispose();
+        unit.orbitPath.material.dispose();
+      }
+      const shared = unit.orbitShared;
+      if (shared) {
+        shared.orbGeo?.dispose();
+        shared.orbMat?.dispose();
+        shared.coreGeo?.dispose();
+        shared.coreMat?.dispose();
+      }
+      unit.orbitGroup = null;
+      unit.orbitOrbs = null;
+      unit.orbitPath = null;
+      unit.orbitShared = null;
+    }
     const skeletons = new Set();
     unit.model?.traverse(object => {
       if (object.isSkinnedMesh && object.skeleton) skeletons.add(object.skeleton);
@@ -2040,20 +2572,12 @@ export class SurvivorGame {
     for (const pickup of this.pickups || []) this.releaseGem(pickup);
     for (const drop of this.fieldDrops || []) {
       this.scene?.remove(drop.mesh);
-      drop.mesh?.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
-      });
+      disposeFieldDropVisual(drop.mesh);
     }
     this.fieldDrops = [];
     this.ui.eventBanner?.classList.add('hidden');
-    for (const pool of this.gemPool?.values?.() || []) {
-      for (const mesh of pool) {
-        for (const geometry of mesh.userData?.pickupGeos || mesh.userData?.gemGeos || []) geometry.dispose();
-        for (const material of mesh.userData?.pickupMats || mesh.userData?.gemMats || []) material.dispose();
-      }
-    }
     this.gemPool?.clear?.();
+    disposeSharedPickups();
     for (const effect of this.combatEffects || []) {
       this.scene.remove(effect.mesh);
       effect.mesh.geometry.dispose();
