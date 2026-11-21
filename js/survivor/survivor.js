@@ -38,11 +38,49 @@ const STAGES = [
 ];
 
 const GEM_TIERS = [
-  { min:10, color:0xffd21f, size:0.34, pulse:0.15, glow:true },
-  { min:6, color:0xef4444, size:0.29, pulse:0.1 },
-  { min:3, color:0x38bdf8, size:0.25, pulse:0.08 },
-  { min:1, color:0xa78bfa, size:0.21, pulse:0.06 },
+  { min:10, color:0xffe066, accent:0xfff6c2, size:0.36 },
+  { min:6, color:0xff4d6d, accent:0xffb3c1, size:0.31 },
+  { min:3, color:0x38bdf8, accent:0xbae6fd, size:0.27 },
+  { min:1, color:0xa78bfa, accent:0xddd6fe, size:0.23 },
 ];
+
+/** Kim cương low-poly đứng yên — không xoay mỗi frame. */
+function createGemMesh(tier) {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshBasicMaterial({ color:tier.color, toneMapped:false });
+  const accentMat = new THREE.MeshBasicMaterial({ color:tier.accent, toneMapped:false });
+  const s = tier.size;
+
+  // Thân octahedron kéo dài = dáng kim cương 3D.
+  const body = new THREE.Mesh(new THREE.OctahedronGeometry(s, 0), bodyMat);
+  body.scale.set(0.92, 1.55, 0.92);
+  body.castShadow = false;
+  body.receiveShadow = false;
+
+  // Mặt bàn trên (table) — hình thoi.
+  const table = new THREE.Mesh(
+    new THREE.CylinderGeometry(s * 0.38, s * 0.58, s * 0.26, 4),
+    accentMat
+  );
+  table.position.y = s * 0.52;
+  table.rotation.y = Math.PI / 4;
+  table.castShadow = false;
+
+  // Đai giữa (girdle) cho rõ cạnh cắt.
+  const girdle = new THREE.Mesh(
+    new THREE.CylinderGeometry(s * 0.62, s * 0.62, s * 0.07, 4),
+    accentMat
+  );
+  girdle.position.y = s * 0.18;
+  girdle.rotation.y = Math.PI / 4;
+  girdle.castShadow = false;
+
+  group.add(body, table, girdle);
+  group.rotation.y = 0.55;
+  group.userData.gemMats = [bodyMat, accentMat];
+  group.userData.gemGeos = [body.geometry, table.geometry, girdle.geometry];
+  return group;
+}
 
 /** Chỉ số cơ bản — cộng bằng điểm thuộc tính trong bảng nhân vật. */
 const ATTR_DEFS = [
@@ -275,7 +313,6 @@ export class SurvivorGame {
     this.hudCache = {};
     this.needsRender = true;
     this.attrSheetOpen = false;
-    this.attrResumeState = 'playing';
     this.currentIntro = null;
     this.introRemaining = 0;
     this.upgradeLevels = {};
@@ -693,7 +730,7 @@ export class SurvivorGame {
       }
       this.needsRender = true;
     }
-    if (this.state !== 'levelup' && this.state !== 'paused' && this.state !== 'attrs') {
+    if (this.state !== 'levelup' && this.state !== 'paused') {
       this.hero.anim.update(dt);
       for (const enemy of this.enemies) enemy.anim.update(dt);
     }
@@ -778,16 +815,12 @@ export class SurvivorGame {
 
   openAttrSheet() {
     if (!this.ui.attrSheet || this.state === 'levelup' || this.state === 'over' || this.state === 'loading') return;
-    if (this.state === 'playing') {
-      this.attrResumeState = 'playing';
-      this.state = 'attrs';
-      this.clearMovement();
-    } else if (this.state === 'paused') {
-      this.attrResumeState = 'paused';
+    // Giữ trận đấu chạy khi mở bảng — tạo áp lực thao tác nhanh.
+    if (this.state === 'paused') {
       this.ui.modal.classList.add('hidden');
-    } else if (this.state === 'attrs') {
-      this.attrResumeState = 'playing';
-    } else return;
+      this.state = 'playing';
+    }
+    if (this.state !== 'playing') return;
     this.attrSheetOpen = true;
     this.renderAttrRows();
     this.ui.attrSheet.classList.remove('hidden');
@@ -798,11 +831,6 @@ export class SurvivorGame {
     if (!this.attrSheetOpen) return;
     this.attrSheetOpen = false;
     this.ui.attrSheet?.classList.add('hidden');
-    if (this.state === 'attrs') this.state = 'playing';
-    if (this.attrResumeState === 'paused') {
-      this.state = 'paused';
-      this.showPauseModal();
-    }
     this.needsRender = true;
   }
 
@@ -1619,38 +1647,27 @@ export class SurvivorGame {
       this.gemPool.set(key, pool);
     }
     let mesh = pool.pop();
-    if (!mesh) {
-      mesh = new THREE.Mesh(
-        new THREE.OctahedronGeometry(tier.size, 0),
-        new THREE.MeshBasicMaterial({ color:tier.color, toneMapped:false })
-      );
-      mesh.castShadow = false;
-      mesh.receiveShadow = false;
-      mesh.rotation.z = Math.PI / 4;
-    }
+    if (!mesh) mesh = createGemMesh(tier);
     mesh.visible = true;
     mesh.position.copy(position);
-    mesh.position.y = 0.3;
+    mesh.position.y = 0.42;
     mesh.scale.setScalar(1);
     this.scene.add(mesh);
-    this.pickups.push({ mesh, value, tier, poolKey:key, age:0, phase:Math.random() * 6, collected:false });
+    this.pickups.push({ mesh, value, tier, poolKey:key, age:0, collected:false });
   }
 
   updatePickups(dt) {
     const heroPos = this.hero.root.position;
     for (const pickup of this.pickups) {
       pickup.age += dt;
-      pickup.phase += dt * 3;
-      pickup.mesh.rotation.y += dt * 3;
-      pickup.mesh.position.y = 0.3 + Math.sin(pickup.phase) * 0.08;
-      pickup.mesh.scale.setScalar(1 + Math.sin(pickup.phase * 1.3) * pickup.tier.pulse);
+      // Ngọc đứng yên — chỉ dịch chuyển khi bị nam châm hút.
       const dx = pickup.mesh.position.x - heroPos.x;
       const dz = pickup.mesh.position.z - heroPos.z;
       const distanceSq = dx * dx + dz * dz;
       const magnet = 2.2 * this.power.magnet * (this.power.attrMagnet || 1);
       if (distanceSq < magnet * magnet) {
         const distance = Math.sqrt(distanceSq) || 0.001;
-        pickup.mesh.position.lerp(tmp2.set(heroPos.x, 0.7, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
+        pickup.mesh.position.lerp(tmp2.set(heroPos.x, 0.42, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
       }
       if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectGem(pickup);
     }
@@ -1664,8 +1681,8 @@ export class SurvivorGame {
     const pool = this.gemPool?.get(pickup.poolKey);
     if (pool) pool.push(pickup.mesh);
     else {
-      pickup.mesh.geometry.dispose();
-      pickup.mesh.material.dispose();
+      for (const geometry of pickup.mesh.userData.gemGeos || []) geometry.dispose();
+      for (const material of pickup.mesh.userData.gemMats || []) material.dispose();
     }
   }
 
@@ -1731,15 +1748,12 @@ export class SurvivorGame {
     this.pendingLevels--;
     this.ui.modal.classList.add('hidden');
     if (this.pendingLevels > 0) this.showLevelUp();
-    else {
-      this.state = 'playing';
-      if (card.kind === 'attr' && this.attrPoints > 0) this.openAttrSheet();
-    }
+    else this.state = 'playing';
     this.updateHud();
   }
 
   togglePause() {
-    if (this.attrSheetOpen && this.state === 'attrs') {
+    if (this.attrSheetOpen) {
       this.closeAttrSheet();
       return;
     }
@@ -1749,7 +1763,6 @@ export class SurvivorGame {
       this.showPauseModal();
       this.needsRender = true;
     } else if (this.state === 'paused') {
-      this.closeAttrSheet();
       this.state = 'playing';
       this.ui.modal.classList.add('hidden');
       this.needsRender = true;
@@ -1959,8 +1972,8 @@ export class SurvivorGame {
     this.ui.eventBanner?.classList.add('hidden');
     for (const pool of this.gemPool?.values?.() || []) {
       for (const mesh of pool) {
-        mesh.geometry.dispose();
-        mesh.material.dispose();
+        for (const geometry of mesh.userData?.gemGeos || []) geometry.dispose();
+        for (const material of mesh.userData?.gemMats || []) material.dispose();
       }
     }
     this.gemPool?.clear?.();
