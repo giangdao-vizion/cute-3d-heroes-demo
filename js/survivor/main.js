@@ -44,21 +44,22 @@ const game = new SurvivorGame(renderer, ui);
 
 function viewportSize() {
   const canvas = $('c');
-  // Lấy kích thước canvas đang phủ full màn (CSS inset:0) — không co theo visualViewport.
-  const width = Math.max(1, Math.round(canvas?.clientWidth || window.visualViewport?.width || innerWidth));
-  const height = Math.max(1, Math.round(canvas?.clientHeight || window.visualViewport?.height || innerHeight));
+  // Canvas CSS: position absolute; top/left/bottom/right:0 — đọc kích thước thật từ DOM.
+  const width = Math.max(1, Math.round(canvas?.clientWidth || innerWidth));
+  const height = Math.max(1, Math.round(canvas?.clientHeight || innerHeight));
   return { width, height };
 }
 
 function resize() {
   const { width, height } = viewportSize();
-  document.documentElement.style.setProperty('--app-height', `${height}px`);
   const canvas = $('c');
-  // Để CSS (inset:0 + 100%) phủ full màn; chỉ set buffer vẽ.
-  canvas.style.width = '';
-  canvas.style.height = '';
+  // Không ghi đè top/left/bottom/right/width/height — để CSS absolute stretch.
   canvas.style.top = '';
   canvas.style.left = '';
+  canvas.style.right = '';
+  canvas.style.bottom = '';
+  canvas.style.width = '';
+  canvas.style.height = '';
   renderer.setSize(width, height, false);
   game.resize(width, height);
 }

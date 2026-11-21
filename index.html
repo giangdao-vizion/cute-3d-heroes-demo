@@ -26,15 +26,17 @@
   /* Game: không zoom khi chạm hai lần, không chọn chữ. */
   html, body, button, a, #hud, #dhud, #dmodal, #panel { touch-action:manipulation; }
   img { -webkit-user-drag:none; user-drag:none; }
-  html { height:100%; height:100dvh; height:-webkit-fill-available; background:#fff0c7; }
+  html { margin:0; width:100%; height:100%; overflow:hidden; background:#fff0c7; }
   html, body {
-    margin:0; width:100%; min-height:100%; min-height:100dvh; min-height:-webkit-fill-available;
-    overflow:hidden; font-family:'Baloo 2', system-ui, sans-serif; color:var(--ink); background:#fff0c7;
+    margin:0; overflow:hidden; font-family:'Baloo 2', system-ui, sans-serif; color:var(--ink); background:#fff0c7;
   }
-  body { position:fixed; inset:0; width:100%; height:100%; height:100dvh; height:-webkit-fill-available; }
-  canvas#c { position:fixed; inset:0; width:100%; height:100%; height:100dvh; display:block; touch-action:none; }
+  body { position:absolute; top:0; left:0; bottom:0; right:0; }
+  canvas#c {
+    position:absolute; top:0; left:0; bottom:0; right:0;
+    width:100%; height:100%; display:block; touch-action:none;
+  }
   /* ---- Trang chủ: nhẹ, không dùng canvas hay model 3D ---- */
-  #home { position:fixed; inset:0; z-index:20; width:100%; height:100%; height:100dvh; height:-webkit-fill-available; overflow:auto; -webkit-overflow-scrolling:touch; padding:calc(18px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom)); background:
+  #home { position:absolute; top:0; left:0; bottom:0; right:0; z-index:20; overflow:auto; -webkit-overflow-scrolling:touch; padding:calc(18px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom)); background:
     radial-gradient(circle at 14% 8%,rgba(255,255,255,.9) 0 5%,transparent 5.5%),
     radial-gradient(circle at 88% 18%,rgba(255,255,255,.6) 0 8%,transparent 8.5%),
     linear-gradient(165deg,#c9efff 0%,#dff7e1 54%,#fff0c7 100%); }
@@ -266,9 +268,9 @@
   .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin:12px 0 0; }
   .stats div { background:#fff; border-radius:12px; padding:4px; font-size:18px; } .stats b { display:block; font-size:20px; }
   .hidden { display:none !important; }
-  /* Sinh tồn trong iframe: giữ Home Screen standalone, không nhảy sang Safari. */
+  /* Sinh tồn trong iframe: absolute top/left/bottom/right:0 phủ full shell. */
   #survivorFrame {
-    position:fixed; inset:0; width:100%; height:100%; height:100dvh; height:-webkit-fill-available;
+    position:absolute; top:0; left:0; bottom:0; right:0;
     border:0; z-index:80; background:var(--ground);
   }
   @media (max-width: 560px) { header button { padding:5px 7px; font-size:12px; white-space:nowrap; } header { top:8px; gap:3px; } }
