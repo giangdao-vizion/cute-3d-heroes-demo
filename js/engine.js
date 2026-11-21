@@ -32,7 +32,9 @@ export async function spawnModel(entry, heightOverride) {
   }
   model.traverse(o => {
     if (o.isMesh) {
-      o.castShadow = true; o.receiveShadow = false; o.frustumCulled = true;
+      o.castShadow = true; o.receiveShadow = false;
+      // Skinned bounds are unreliable while animating — culling them causes pop/jitter.
+      o.frustumCulled = !o.isSkinnedMesh;
       // Quaternius để metalness 0.4 nên model bị tối: chuyển về chất liệu mờ kiểu toon.
       for (const m of [].concat(o.material)) { if (m.metalness !== undefined) { m.metalness = 0; m.roughness = Math.max(m.roughness, 0.75); } }
     }
@@ -113,14 +115,16 @@ export function makeRenderer(canvas) {
   const mobile = isMobileGraphics();
   const r = new THREE.WebGLRenderer({
     canvas,
-    antialias: !mobile,
-    powerPreference: mobile ? 'low-power' : 'high-performance',
+    // Keep MSAA on phones — turning it off made silhouettes visibly jagged.
+    antialias: true,
+    // Prefer default over low-power: low-power can stutter under animation load.
+    powerPreference: mobile ? 'default' : 'high-performance',
     alpha: false,
   });
-  // Cap DPR hard on phones — fill-rate is the main heat source.
-  r.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1.25 : 2));
+  // Soft cap only: 1.25 was too soft and looked stair-steppy while moving.
+  r.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1.75 : 2));
   r.shadowMap.enabled = true;
-  r.shadowMap.type = mobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+  r.shadowMap.type = mobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   r.outputColorSpace = THREE.SRGBColorSpace;
   r.toneMapping = THREE.ACESFilmicToneMapping;
   r.toneMappingExposure = 1.05;
@@ -133,7 +137,7 @@ export function addLights(scene, size = 30) {
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.4);
   sun.position.set(12, 22, 10);
   sun.castShadow = true;
-  const map = mobile ? 1024 : 2048;
+  const map = mobile ? 1536 : 2048;
   sun.shadow.mapSize.set(map, map);
   Object.assign(sun.shadow.camera, { left: -size, right: size, top: size, bottom: -size, near: 1, far: 80 });
   sun.shadow.bias = -0.0005;

@@ -971,6 +971,9 @@ export class SurvivorGame {
       let dx = heroPos.x - pos.x;
       let dz = heroPos.z - pos.z;
       let distance = Math.max(0.001, Math.hypot(dx, dz));
+      // Separation as velocity (× dt). Instant position shoves looked like diagonal stutter.
+      let sepX = 0;
+      let sepZ = 0;
 
       for (let gx = enemy.gridX - 1; gx <= enemy.gridX + 1; gx++) {
         for (let gz = enemy.gridZ - 1; gz <= enemy.gridZ + 1; gz++) {
@@ -980,25 +983,33 @@ export class SurvivorGame {
             if (other === enemy || other.dead) continue;
             const ox = pos.x - other.root.position.x;
             const oz = pos.z - other.root.position.z;
-            const od = Math.hypot(ox, oz);
+            const odSq = ox * ox + oz * oz;
             const minimum = (enemy.radius + other.radius) * 0.72;
-            if (od > 0.001 && od < minimum) {
-              pos.x += ox / od * (minimum - od) * 0.18;
-              pos.z += oz / od * (minimum - od) * 0.18;
+            if (odSq > 1e-6 && odSq < minimum * minimum) {
+              const od = Math.sqrt(odSq);
+              const push = (minimum - od) / od;
+              sepX += ox * push;
+              sepZ += oz * push;
             }
           }
         }
       }
 
+      const moveScale = enemy.paralyzeT > 0 ? 0 : enemy.slowT > 0 ? enemy.slowFactor : 1;
+      const seekX = dx / distance * enemy.speed * moveScale;
+      const seekZ = dz / distance * enemy.speed * moveScale;
+      const moveX = seekX + sepX * 3.4;
+      const moveZ = seekZ + sepZ * 3.4;
+      pos.x += moveX * dt;
+      pos.z += moveZ * dt;
+      // Face along actual motion so diagonal crowd pushes don't whip the mesh.
+      if (moveX * moveX + moveZ * moveZ > 0.04) this.faceTo(enemy, pos.x + moveX, pos.z + moveZ, dt, 10);
+      else this.faceTo(enemy, heroPos.x, heroPos.z, dt, 8);
+      enemy.anim.play(moveScale > 0 ? 'run' : 'idle');
+
       dx = heroPos.x - pos.x;
       dz = heroPos.z - pos.z;
       distance = Math.max(0.001, Math.hypot(dx, dz));
-      const moveScale = enemy.paralyzeT > 0 ? 0 : enemy.slowT > 0 ? enemy.slowFactor : 1;
-      pos.x += dx / distance * enemy.speed * moveScale * dt;
-      pos.z += dz / distance * enemy.speed * moveScale * dt;
-      this.faceTo(enemy, heroPos.x, heroPos.z, dt);
-      enemy.anim.play(moveScale > 0 ? 'run' : 'idle');
-
       if (distance < this.hero.radius + enemy.radius + 0.12 && this.hero.invulnerable <= 0) {
         this.damageHero(enemy.dmg, dx / distance, dz / distance);
       }
