@@ -52,6 +52,133 @@ const SHARED_PICKUPS = {
   cardPlane: null,
 };
 
+/** Tia sét lan — dùng BoxGeometry dày (Line WebGL gần như vô hình trên mobile). */
+const CHAIN_SEGMENTS = 12;
+const SHARED_FX = {
+  chainBox: null,
+  chainCoreMat: null,
+  chainGlowMat: null,
+  chainFlashMat: null,
+};
+
+function getChainSharedFx() {
+  if (!SHARED_FX.chainBox) {
+    SHARED_FX.chainBox = new THREE.BoxGeometry(1, 1, 1);
+    SHARED_FX.chainCoreMat = new THREE.MeshBasicMaterial({
+      color:0xf8feff, transparent:true, opacity:1, depthWrite:false, toneMapped:false,
+    });
+    SHARED_FX.chainGlowMat = new THREE.MeshBasicMaterial({
+      color:0x22d3ee, transparent:true, opacity:0.55, depthWrite:false, toneMapped:false,
+      blending:THREE.AdditiveBlending,
+    });
+    const flash = document.createElement('canvas');
+    flash.width = flash.height = 64;
+    const ctx = flash.getContext('2d');
+    const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.35, 'rgba(125,249,255,0.95)');
+    grad.addColorStop(0.7, 'rgba(34,211,238,0.35)');
+    grad.addColorStop(1, 'rgba(34,211,238,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(flash);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    SHARED_FX.chainFlashMat = new THREE.SpriteMaterial({
+      map:tex, transparent:true, depthWrite:false, toneMapped:false,
+      blending:THREE.AdditiveBlending,
+    });
+  }
+  return SHARED_FX;
+}
+
+function disposeSharedFx() {
+  SHARED_FX.chainBox?.dispose();
+  SHARED_FX.chainCoreMat?.dispose();
+  SHARED_FX.chainGlowMat?.dispose();
+  if (SHARED_FX.chainFlashMat) {
+    SHARED_FX.chainFlashMat.map?.dispose();
+    SHARED_FX.chainFlashMat.dispose();
+  }
+  SHARED_FX.chainBox = null;
+  SHARED_FX.chainCoreMat = null;
+  SHARED_FX.chainGlowMat = null;
+  SHARED_FX.chainFlashMat = null;
+}
+
+function createChainBoltGroup() {
+  const shared = getChainSharedFx();
+  const group = new THREE.Group();
+  group.userData.sharedFx = true;
+  // Clone material theo group — mỗi tia tự fade/flicker, không đụng tia khác.
+  const coreMat = shared.chainCoreMat.clone();
+  const glowMat = shared.chainGlowMat.clone();
+  const flashMat = shared.chainFlashMat.clone();
+  group.userData.coreMat = coreMat;
+  group.userData.glowMat = glowMat;
+  group.userData.flashMat = flashMat;
+  group.userData.segments = [];
+  for (let i = 0; i < CHAIN_SEGMENTS; i++) {
+    const glow = new THREE.Mesh(shared.chainBox, glowMat);
+    const core = new THREE.Mesh(shared.chainBox, coreMat);
+    glow.visible = false;
+    core.visible = false;
+    group.add(glow);
+    group.add(core);
+    group.userData.segments.push({ glow, core });
+  }
+  const flashA = new THREE.Sprite(flashMat);
+  const flashB = new THREE.Sprite(flashMat);
+  flashA.scale.set(0.01, 0.01, 0.01);
+  flashB.scale.set(0.01, 0.01, 0.01);
+  group.add(flashA);
+  group.add(flashB);
+  group.userData.flashA = flashA;
+  group.userData.flashB = flashB;
+  return group;
+}
+
+const _chainDir = new THREE.Vector3();
+const _chainMid = new THREE.Vector3();
+const _chainZ = new THREE.Vector3(0, 0, 1);
+
+function placeChainSegment(mesh, ax, ay, az, bx, by, bz, thickness) {
+  _chainDir.set(bx - ax, by - ay, bz - az);
+  const len = Math.max(0.08, _chainDir.length());
+  _chainMid.set((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5);
+  _chainDir.multiplyScalar(1 / len);
+  mesh.position.copy(_chainMid);
+  mesh.scale.set(thickness, thickness, len);
+  mesh.quaternion.setFromUnitVectors(_chainZ, _chainDir);
+  mesh.visible = true;
+}
+
+function buildLightningPath(from, to, count) {
+  const points = new Float32Array((count + 1) * 3);
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const dist = Math.hypot(dx, dz) || 0.01;
+  const nx = -dz / dist;
+  const nz = dx / dist;
+  const yBase = 0.72;
+  points[0] = from.x;
+  points[1] = yBase + 0.15;
+  points[2] = from.z;
+  for (let i = 1; i < count; i++) {
+    const t = i / count;
+    const fade = 1 - Math.abs(t - 0.5) * 1.6;
+    const amp = (0.28 + dist * 0.1) * Math.max(0.15, fade);
+    const off = (Math.random() - 0.5) * 2 * amp;
+    const yOff = (Math.random() - 0.35) * 0.55;
+    points[i * 3] = from.x + dx * t + nx * off;
+    points[i * 3 + 1] = yBase + 0.2 + yOff;
+    points[i * 3 + 2] = from.z + dz * t + nz * off;
+  }
+  points[count * 3] = to.x;
+  points[count * 3 + 1] = yBase + 0.15;
+  points[count * 3 + 2] = to.z;
+  return points;
+}
+
 function cssHex(hex) {
   return `#${(hex >>> 0).toString(16).padStart(6, '0')}`;
 }
@@ -2067,8 +2194,9 @@ export class SurvivorGame {
 
     const chainJumps = P.chain + (this.synergies.stormVolley ? Math.max(0, P.multi - 1) : 0);
     if (chainJumps > 0) {
-      const used = projectile.secondaryHits;
-      const chainRange = 4.1 + P.chain * 0.35;
+      // Set riêng — không bị blast “nuốt” mục tiêu khiến tia sét không bao giờ nhảy.
+      const used = new Set([primary]);
+      const chainRange = 4.6 + P.chain * 0.45;
       const chainDamage = damage * (0.3 + P.chain * 0.04);
       let from = primary;
       for (let jump = 0; jump < chainJumps; jump++) {
@@ -2081,11 +2209,25 @@ export class SurvivorGame {
         if (!target) break;
         this.addChainEffect(from.root.position, target.root.position);
         used.add(target);
+        projectile.secondaryHits.add(target);
         this.hitEnemy(target, chainDamage);
-        if (this.synergies.frostBurst && P.freeze > 0) this.applyFreeze(target);
+        if (P.freeze > 0) this.applyFreeze(target);
         from = target;
       }
     }
+  }
+
+  disposeCombatEffectMesh(mesh, kind) {
+    if (!mesh) return;
+    if (kind === 'chain' || mesh.userData?.sharedFx) {
+      mesh.userData.coreMat?.dispose();
+      mesh.userData.glowMat?.dispose();
+      mesh.userData.flashMat?.dispose();
+      // Geometry dùng chung qua SHARED_FX — không dispose ở đây.
+      return;
+    }
+    mesh.geometry?.dispose();
+    mesh.material?.dispose();
   }
 
   addBlastEffect(position, radius) {
@@ -2108,36 +2250,88 @@ export class SurvivorGame {
 
   addChainEffect(from, to) {
     if (this.combatEffects.length >= 28) return;
-    let mesh = this.effectPool.chain.pop();
-    if (!mesh) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
-      mesh = new THREE.Line(
-        geometry,
-        new THREE.LineBasicMaterial({ color:0x67e8f9, transparent:true, opacity:0.95, depthWrite:false })
+    let group = this.effectPool.chain.pop();
+    if (!group) group = createChainBoltGroup();
+
+    const segCount = 7 + Math.floor(Math.random() * 4); // 7–10 gãy
+    const points = buildLightningPath(from, to, segCount);
+    const segments = group.userData.segments;
+    for (let i = 0; i < segments.length; i++) {
+      const { glow, core } = segments[i];
+      if (i >= segCount) {
+        glow.visible = false;
+        core.visible = false;
+        continue;
+      }
+      const ai = i * 3;
+      const bi = (i + 1) * 3;
+      placeChainSegment(
+        glow,
+        points[ai], points[ai + 1], points[ai + 2],
+        points[bi], points[bi + 1], points[bi + 2],
+        0.16
+      );
+      placeChainSegment(
+        core,
+        points[ai], points[ai + 1], points[ai + 2],
+        points[bi], points[bi + 1], points[bi + 2],
+        0.055
       );
     }
-    const positions = mesh.geometry.attributes.position.array;
-    positions[0] = from.x; positions[1] = 0.7; positions[2] = from.z;
-    positions[3] = (from.x + to.x) * 0.5 + (Math.random() - 0.5) * 0.35;
-    positions[4] = 0.82;
-    positions[5] = (from.z + to.z) * 0.5 + (Math.random() - 0.5) * 0.35;
-    positions[6] = to.x; positions[7] = 0.7; positions[8] = to.z;
-    mesh.geometry.attributes.position.needsUpdate = true;
-    mesh.geometry.computeBoundingSphere();
-    mesh.material.opacity = 0.95;
-    this.scene.add(mesh);
-    this.combatEffects.push({ mesh, t:0, life:0.16, kind:'chain' });
+
+    const flashA = group.userData.flashA;
+    const flashB = group.userData.flashB;
+    flashA.position.set(from.x, 0.9, from.z);
+    flashB.position.set(to.x, 0.9, to.z);
+    flashA.scale.set(1.15, 1.15, 1.15);
+    flashB.scale.set(1.35, 1.35, 1.35);
+    group.userData.coreMat.opacity = 1;
+    group.userData.glowMat.opacity = 0.6;
+    group.userData.flashMat.opacity = 1;
+
+    group.visible = true;
+    this.scene.add(group);
+    this.combatEffects.push({ mesh:group, t:0, life:0.42, kind:'chain', flicker:0, rebranched:false });
   }
 
   updateCombatEffects(dt) {
     for (const effect of this.combatEffects) {
       effect.t += dt;
       const progress = Math.min(1, effect.t / effect.life);
-      effect.mesh.material.opacity = 1 - progress;
-      if (effect.kind === 'blast') effect.mesh.scale.setScalar(effect.radius * (0.35 + progress * 0.8));
+      if (effect.kind === 'blast') {
+        effect.mesh.material.opacity = 1 - progress;
+        effect.mesh.scale.setScalar(effect.radius * (0.35 + progress * 0.8));
+      } else if (effect.kind === 'chain') {
+        // Nhấp nháy nhanh — giống tia sét thật.
+        effect.flicker = (effect.flicker || 0) + dt * 28;
+        const pulse = 0.55 + Math.abs(Math.sin(effect.flicker)) * 0.45;
+        const fade = 1 - progress * progress;
+        const alpha = pulse * fade;
+        const ud = effect.mesh.userData;
+        if (ud.glowMat) ud.glowMat.opacity = 0.3 + alpha * 0.5;
+        if (ud.coreMat) ud.coreMat.opacity = 0.7 + alpha * 0.3;
+        if (ud.flashMat) ud.flashMat.opacity = alpha;
+        const flashA = ud.flashA;
+        const flashB = ud.flashB;
+        if (flashA) flashA.scale.setScalar((1.1 + pulse * 0.55) * fade);
+        if (flashB) flashB.scale.setScalar((1.35 + pulse * 0.7) * fade);
+        // Đổi đường gãy giữa chừng để trông sống động hơn.
+        if (effect.t > 0.12 && !effect.rebranched && progress < 0.7) {
+          effect.rebranched = true;
+          const segs = effect.mesh.userData.segments;
+          if (segs?.length) {
+            const visible = segs.filter(s => s.core.visible);
+            if (visible.length >= 3) {
+              const mid = visible[Math.floor(visible.length / 2)];
+              mid.core.position.y += (Math.random() - 0.5) * 0.35;
+              mid.glow.position.y = mid.core.position.y;
+            }
+          }
+        }
+      }
       if (progress < 1) continue;
       this.scene.remove(effect.mesh);
+      effect.mesh.visible = false;
       this.effectPool[effect.kind].push(effect.mesh);
       effect.dead = true;
     }
@@ -2866,15 +3060,13 @@ export class SurvivorGame {
     disposeSharedPickups();
     for (const effect of this.combatEffects || []) {
       this.scene.remove(effect.mesh);
-      effect.mesh.geometry.dispose();
-      effect.mesh.material.dispose();
+      this.disposeCombatEffectMesh(effect.mesh, effect.kind);
     }
-    for (const pool of Object.values(this.effectPool || {})) {
-      for (const mesh of pool) {
-        mesh.geometry.dispose();
-        mesh.material.dispose();
-      }
+    for (const [kind, pool] of Object.entries(this.effectPool || {})) {
+      for (const mesh of pool) this.disposeCombatEffectMesh(mesh, kind);
     }
+    this.effectPool = { blast:[], chain:[] };
+    disposeSharedFx();
     this.disposeUnit(this.hero);
     for (const enemy of this.enemies || []) this.disposeUnit(enemy);
     for (const geometry of this.fireballGeometries || []) geometry.dispose();
