@@ -40,21 +40,35 @@ const GEM_TIERS = [
   { min:1, color:0xa78bfa, size:0.21, pulse:0.06 },
 ];
 
-const UPGRADES = [
-  { id:'damage', icon:'⚔', name:'Sức mạnh', desc:'+25% sát thương', max:5, apply:g => { g.power.damage *= 1.25; } },
-  { id:'speed', icon:'👟', name:'Nhanh chân', desc:'+12% tốc độ chạy', max:5, apply:g => { g.hero.speed *= 1.12; } },
+/** Chỉ số cơ bản — cộng bằng điểm thuộc tính trong bảng nhân vật. */
+const ATTR_DEFS = [
+  { id:'str', icon:'⚔', name:'Sức mạnh', desc:'+12% sát thương mỗi điểm', max:12, perLevel:0.12 },
+  { id:'agi', icon:'👟', name:'Tốc độ', desc:'+8% tốc độ chạy mỗi điểm', max:12, perLevel:0.08 },
+  { id:'vit', icon:'♥', name:'Sinh lực', desc:'+22 máu tối đa mỗi điểm', max:12, perLevel:22 },
+  { id:'def', icon:'⬟', name:'Phòng thủ', desc:'Giảm 6% sát thương nhận mỗi điểm', max:10, perLevel:0.06 },
+];
+
+/** Phần thưởng lên cấp: kỹ năng bổ trợ (không gồm chỉ số cơ bản). */
+const SPECIAL_UPGRADES = [
   { id:'rate', icon:'✦', name:'Liên hoàn', desc:'+18% tốc độ tấn công', max:5, apply:g => { g.power.interval /= 1.18; } },
   { id:'multi', icon:'➹', name:'Đa mục tiêu', desc:'+1 tia đạn mỗi lượt', max:3, apply:g => { g.power.multi++; } },
   { id:'pierce', icon:'➤', name:'Xuyên phá', desc:'Đạn xuyên thêm 1 quái', max:3, apply:g => { g.power.pierce++; } },
   { id:'size', icon:'◉', name:'Đạn khổng lồ', desc:'+25% kích thước và vùng trúng', max:4, apply:g => { g.power.size *= 1.25; } },
-  { id:'health', icon:'♥', name:'Sinh lực', desc:'+30 máu tối đa và hồi đầy', max:5, apply:g => { g.hero.maxHp += 30; g.hero.hp = g.hero.maxHp; } },
   { id:'magnet', icon:'◆', name:'Nam châm', desc:'+35% phạm vi hút ngọc', max:4, apply:g => { g.power.magnet *= 1.35; g.updateMagnetRing(); } },
-  { id:'armor', icon:'⬟', name:'Giáp hộ mệnh', desc:'Giảm 12% sát thương nhận', max:4, apply:g => { g.power.armor *= 0.88; } },
   { id:'range', icon:'◎', name:'Tầm bắn', desc:'+15% tầm bắn', max:5, apply:g => { g.power.range *= 1.15; g.updateRangeRing(); } },
   { id:'chain', icon:'ϟ', name:'Sét lan', desc:'Tia sét lan thêm 1 quái gần đó', max:4, apply:g => { g.power.chain++; } },
   { id:'blast', icon:'✹', name:'Nổ lan', desc:'Fireball gây nổ quanh mục tiêu', max:4, apply:g => { g.power.blast++; } },
   { id:'freeze', icon:'❄', name:'Băng giá', desc:'Làm chậm, có cơ hội đóng băng quái', max:4, apply:g => { g.power.freeze++; } },
 ];
+
+const ATTR_POINT_CARD = {
+  id:'attrPoint',
+  icon:'◎',
+  name:'Điểm thuộc tính',
+  desc:'+1 điểm để cộng trong bảng nhân vật',
+  kind:'attr',
+  max:999,
+};
 
 function easeOutBack(x) {
   const c = 1.70158;
@@ -86,7 +100,11 @@ export class SurvivorGame {
       this.keys.add(key);
       if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) e.preventDefault();
       if (this.state === 'levelup' && ['1','2','3'].includes(key)) this.chooseUpgrade(Number(key) - 1);
-      if (!e.repeat && (key === 'p' || key === 'escape')) this.togglePause();
+      if (!e.repeat && key === 'c') this.toggleAttrSheet();
+      if (!e.repeat && (key === 'p' || key === 'escape')) {
+        if (this.attrSheetOpen) this.closeAttrSheet();
+        else this.togglePause();
+      }
     });
     addEventListener('keyup', e => this.keys.delete(e.key.toLowerCase()));
     addEventListener('blur', () => this.clearMovement());
@@ -115,6 +133,11 @@ export class SurvivorGame {
     canvas.addEventListener('pointerup', stop);
     canvas.addEventListener('pointercancel', stop);
     this.ui.pause.onclick = () => this.togglePause();
+    this.ui.openAttrs?.addEventListener('click', () => this.toggleAttrSheet());
+    this.ui.attrClose?.addEventListener('click', () => this.closeAttrSheet());
+    this.ui.attrSheet?.addEventListener('click', e => {
+      if (e.target === this.ui.attrSheet) this.closeAttrSheet();
+    });
   }
 
   updateJoystick(e) {
@@ -172,11 +195,15 @@ export class SurvivorGame {
     this.labelClock = 0;
     this.hudCache = {};
     this.needsRender = true;
+    this.attrSheetOpen = false;
+    this.attrResumeState = 'playing';
     this.currentIntro = null;
     this.introRemaining = 0;
     this.upgradeLevels = {};
+    this.attrPoints = 0;
+    this.attrs = { str:0, agi:0, vit:0, def:0 };
     this.power = {
-      damage:1, interval:0.72, multi:1, pierce:0, size:1,
+      damage:1, damageBonus:1, interval:0.72, multi:1, pierce:0, size:1,
       magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
       chain:0, blast:0, freeze:0,
     };
@@ -186,12 +213,17 @@ export class SurvivorGame {
     const heroModel = await spawnModel(heroEntry);
     if (runId !== this.runId) return;
     this.hero = this.makeUnit(heroEntry, heroModel, { ...heroEntry.stats, team:'hero', speed:heroEntry.stats.speed * 1.18 });
-    this.hero.hp = this.hero.maxHp = Math.max(150, heroEntry.stats.hp);
+    this.hero.baseSpeed = this.hero.speed;
+    this.hero.baseMaxHp = Math.max(150, heroEntry.stats.hp);
+    this.hero.hp = this.hero.maxHp = this.hero.baseMaxHp;
     this.hero.invulnerable = 0;
     this.hero.anim.play('idle');
     scene.add(this.hero.root);
+    this.recalcAttributes();
     this.updateRangeRing();
     this.updateMagnetRing();
+    this.renderAttrRows();
+    this.updateAttrBadge();
 
     onProgress(0.52, 'Đang tải quái');
     await Promise.all(['Enemy','Rat','Skeleton_Minion'].map(id => spawnModel(byId[id])));
@@ -454,10 +486,156 @@ export class SurvivorGame {
       }
       this.needsRender = true;
     }
-    if (this.state !== 'levelup' && this.state !== 'paused') {
+    if (this.state !== 'levelup' && this.state !== 'paused' && this.state !== 'attrs') {
       this.hero.anim.update(dt);
       for (const enemy of this.enemies) enemy.anim.update(dt);
     }
+  }
+
+  canSpendAnyAttr() {
+    return ATTR_DEFS.some(def => (this.attrs[def.id] || 0) < def.max);
+  }
+
+  recalcAttributes() {
+    if (!this.hero) return;
+    const { str, agi, vit, def } = this.attrs;
+    this.power.damage = (1 + str * 0.12) * (this.power.damageBonus || 1);
+    this.hero.speed = this.hero.baseSpeed * (1 + agi * 0.08);
+    const nextMax = this.hero.baseMaxHp + vit * 22;
+    const gained = nextMax - this.hero.maxHp;
+    this.hero.maxHp = nextMax;
+    if (gained > 0) this.hero.hp = Math.min(this.hero.maxHp, this.hero.hp + gained);
+    this.power.armor = Math.pow(0.94, def);
+  }
+
+  spendAttr(id) {
+    if (this.attrPoints <= 0) return;
+    const def = ATTR_DEFS.find(item => item.id === id);
+    if (!def || (this.attrs[id] || 0) >= def.max) return;
+    this.attrPoints--;
+    this.attrs[id] = (this.attrs[id] || 0) + 1;
+    this.recalcAttributes();
+    this.renderAttrRows();
+    this.updateAttrBadge();
+    this.updateHud();
+    this.toast(`${def.icon} ${def.name} +1`);
+    this.needsRender = true;
+  }
+
+  renderAttrRows() {
+    if (!this.ui.attrRows) return;
+    this.ui.attrRows.innerHTML = ATTR_DEFS.map(def => {
+      const level = this.attrs[def.id] || 0;
+      const full = level >= def.max;
+      const can = this.attrPoints > 0 && !full;
+      return `<div class="attr-row">
+        <div class="attr-icon">${def.icon}</div>
+        <div class="attr-copy">
+          <b>${def.name}</b>
+          <small>${def.desc}</small>
+          <em>Cấp ${level}/${def.max}</em>
+        </div>
+        <button class="attr-plus" type="button" data-attr="${def.id}" ${can ? '' : 'disabled'} aria-label="Cộng ${def.name}">+</button>
+      </div>`;
+    }).join('');
+    if (this.ui.attrPointsLabel) this.ui.attrPointsLabel.textContent = String(this.attrPoints);
+    this.ui.attrRows.querySelectorAll('[data-attr]').forEach(button => {
+      button.onclick = () => this.spendAttr(button.dataset.attr);
+    });
+  }
+
+  updateAttrBadge() {
+    const badge = this.ui.attrBadge;
+    if (!badge) return;
+    if (this.attrPoints > 0) {
+      badge.textContent = String(this.attrPoints);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
+  toggleAttrSheet() {
+    if (this.attrSheetOpen) this.closeAttrSheet();
+    else this.openAttrSheet();
+  }
+
+  openAttrSheet() {
+    if (!this.ui.attrSheet || this.state === 'levelup' || this.state === 'over' || this.state === 'loading') return;
+    if (this.state === 'playing') {
+      this.attrResumeState = 'playing';
+      this.state = 'attrs';
+      this.clearMovement();
+    } else if (this.state === 'paused') {
+      this.attrResumeState = 'paused';
+      this.ui.modal.classList.add('hidden');
+    } else if (this.state === 'attrs') {
+      this.attrResumeState = 'playing';
+    } else return;
+    this.attrSheetOpen = true;
+    this.renderAttrRows();
+    this.ui.attrSheet.classList.remove('hidden');
+    this.needsRender = true;
+  }
+
+  closeAttrSheet() {
+    if (!this.attrSheetOpen) return;
+    this.attrSheetOpen = false;
+    this.ui.attrSheet?.classList.add('hidden');
+    if (this.state === 'attrs') this.state = 'playing';
+    if (this.attrResumeState === 'paused') {
+      this.state = 'paused';
+      this.showPauseModal();
+    }
+    this.needsRender = true;
+  }
+
+  showPauseModal() {
+    this.ui.modal.innerHTML = `<div class="box"><h2>Tạm dừng</h2><p>Trận đấu đang được đóng băng.</p><div class="actions"><button id="resume">Tiếp tục</button><button id="pauseAttrs" class="alt">Thuộc tính</button><a class="alt" href="index.html">Về sảnh</a></div></div>`;
+    this.ui.modal.classList.remove('hidden');
+    this.ui.modal.querySelector('#resume').onclick = () => this.togglePause();
+    this.ui.modal.querySelector('#pauseAttrs').onclick = () => this.openAttrSheet();
+    bindLobbyLinks(this.ui.modal);
+  }
+
+  buildLevelUpHand() {
+    const specials = SPECIAL_UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
+    const hand = [];
+    const seen = new Set();
+    const pool = [...specials];
+    if (this.canSpendAnyAttr()) {
+      // Bias lightly toward offering an attribute point each level-up.
+      pool.push(ATTR_POINT_CARD, ATTR_POINT_CARD);
+    }
+    shuffle(pool);
+    for (const card of pool) {
+      if (hand.length >= 3) break;
+      if (seen.has(card.id)) continue;
+      seen.add(card.id);
+      hand.push(card);
+    }
+    if (hand.length < 3 && this.canSpendAnyAttr() && !seen.has(ATTR_POINT_CARD.id)) {
+      seen.add(ATTR_POINT_CARD.id);
+      hand.push(ATTR_POINT_CARD);
+    }
+    for (const card of specials) {
+      if (hand.length >= 3) break;
+      if (seen.has(card.id)) continue;
+      seen.add(card.id);
+      hand.push(card);
+    }
+    if (!hand.length) {
+      hand.push({
+        id:'overflowDamage',
+        icon:'⚔',
+        name:'Sức mạnh vô hạn',
+        desc:'+10% sát thương',
+        kind:'overflow',
+        max:999,
+        apply:g => { g.power.damageBonus *= 1.1; g.recalcAttributes(); },
+      });
+    }
+    return hand.slice(0, 3);
   }
 
   updateHero(dt) {
@@ -985,32 +1163,25 @@ export class SurvivorGame {
   }
 
   showLevelUp() {
+    this.closeAttrSheet();
     this.state = 'levelup';
     this.needsRender = true;
     this.clearMovement();
-    const available = UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
-    if (!available.length) {
-      this.power.damage *= 1.1;
-      this.pendingLevels--;
-      this.toast('⚔ Sức mạnh vô hạn +10%');
-      if (this.pendingLevels > 0) this.showLevelUp();
-      else {
-        this.state = 'playing';
-      }
-      return;
-    }
-    this.hand = shuffle([...available]).slice(0, 3);
+    this.hand = this.buildLevelUpHand();
     this.ui.modal.innerHTML = `
       <div class="box">
         <h2>✨ Lên cấp ${this.level}!</h2>
-        <p>Chọn một sức mạnh mới</p>
-        <div class="cards">${this.hand.map((card, i) => `
-          <button class="card" data-card="${i}">
+        <p>Chọn kỹ năng bổ trợ hoặc điểm thuộc tính</p>
+        <div class="cards">${this.hand.map((card, i) => {
+          const levelLabel = card.kind === 'attr'
+            ? 'Điểm +1'
+            : `Cấp ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
+          return `<button class="card" data-card="${i}">
             <span class="icon">${card.icon}</span><b>${card.name}</b>
             <small>${card.desc}</small>
-            <em>Cấp ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}</em>
-          </button>`).join('')}
-        </div>
+            <em>${levelLabel}</em>
+          </button>`;
+        }).join('')}</div>
         <p>Phím 1 · 2 · 3</p>
       </div>`;
     this.ui.modal.classList.remove('hidden');
@@ -1023,28 +1194,38 @@ export class SurvivorGame {
     if (this.state !== 'levelup') return;
     const card = this.hand[index];
     if (!card) return;
-    this.upgradeLevels[card.id] = (this.upgradeLevels[card.id] || 0) + 1;
-    card.apply(this);
+    if (card.kind === 'attr') {
+      this.attrPoints++;
+      this.updateAttrBadge();
+      this.renderAttrRows();
+      this.toast('◎ +1 điểm thuộc tính');
+    } else {
+      this.upgradeLevels[card.id] = (this.upgradeLevels[card.id] || 0) + 1;
+      card.apply(this);
+      this.toast(`${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
+    }
     this.pendingLevels--;
     this.ui.modal.classList.add('hidden');
-    this.toast(`${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
     if (this.pendingLevels > 0) this.showLevelUp();
     else {
       this.state = 'playing';
+      if (card.kind === 'attr' && this.attrPoints > 0) this.openAttrSheet();
     }
     this.updateHud();
   }
 
   togglePause() {
+    if (this.attrSheetOpen && this.state === 'attrs') {
+      this.closeAttrSheet();
+      return;
+    }
     if (this.state === 'playing') {
       this.state = 'paused';
       this.clearMovement();
-      this.ui.modal.innerHTML = `<div class="box"><h2>Tạm dừng</h2><p>Trận đấu đang được đóng băng.</p><div class="actions"><button id="resume">Tiếp tục</button><a class="alt" href="index.html">Về sảnh</a></div></div>`;
-      this.ui.modal.classList.remove('hidden');
-      this.ui.modal.querySelector('#resume').onclick = () => this.togglePause();
-      bindLobbyLinks(this.ui.modal);
+      this.showPauseModal();
       this.needsRender = true;
     } else if (this.state === 'paused') {
+      this.closeAttrSheet();
       this.state = 'playing';
       this.ui.modal.classList.add('hidden');
       this.needsRender = true;
@@ -1188,6 +1369,12 @@ export class SurvivorGame {
     if (this.state !== 'playing' && this.state !== 'loading') this.needsRender = false;
   }
 
+  // Keep attr sheet closed across scene rebuilds.
+  cleanupAttrUi() {
+    this.attrSheetOpen = false;
+    this.ui.attrSheet?.classList.add('hidden');
+  }
+
   disposeUnit(unit) {
     if (!unit || unit.disposed) return;
     unit.disposed = true;
@@ -1220,6 +1407,7 @@ export class SurvivorGame {
 
   cleanupScene() {
     if (!this.scene) return;
+    this.cleanupAttrUi();
     this.currentIntro = null;
     this.introRemaining = 0;
     this.ui.enemyIntro?.classList.add('hidden');

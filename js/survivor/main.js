@@ -18,6 +18,12 @@ const ui = {
   xpFill:$('xpFill'),
   level:$('level'),
   pause:$('pause'),
+  openAttrs:$('openAttrs'),
+  attrBadge:$('attrBadge'),
+  attrSheet:$('attrSheet'),
+  attrRows:$('attrRows'),
+  attrPointsLabel:$('attrPoints'),
+  attrClose:$('attrClose'),
   enemyIntro:$('enemyIntro'),
   hint:$('hint'),
   joystick:$('joystick'),
@@ -32,13 +38,25 @@ const ui = {
 
 const game = new SurvivorGame(renderer, ui);
 
+function viewportSize() {
+  const vv = window.visualViewport;
+  return {
+    width: Math.max(1, Math.round(vv?.width ?? innerWidth)),
+    height: Math.max(1, Math.round(vv?.height ?? innerHeight)),
+  };
+}
+
 function resize() {
-  const width = innerWidth;
-  const height = innerHeight;
+  const { width, height } = viewportSize();
+  const canvas = $('c');
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
   renderer.setSize(width, height, false);
   game.resize(width, height);
 }
 addEventListener('resize', resize);
+window.visualViewport?.addEventListener('resize', resize);
+window.visualViewport?.addEventListener('scroll', resize);
 resize();
 
 document.addEventListener('visibilitychange', () => {

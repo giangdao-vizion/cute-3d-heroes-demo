@@ -20,9 +20,11 @@
 <style>
   :root { --ink:#2b2340; --card:#fffaf2; --accent:#ff7a59; --purple:#7c3aed; }
   * { box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
-  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#9fd8ff; font-family:'Baloo 2',system-ui,sans-serif; color:var(--ink); touch-action:none; }
+  html { height:100%; height:100dvh; }
+  html, body { margin:0; width:100%; min-height:100%; min-height:100dvh; min-height:-webkit-fill-available; overflow:hidden; background:#9fd8ff; font-family:'Baloo 2',system-ui,sans-serif; color:var(--ink); touch-action:none; }
+  body { position:fixed; inset:0; width:100%; height:100%; height:100dvh; }
   button, a { font:inherit; }
-  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  canvas#c { position:fixed; inset:0; width:100%; width:100dvw; height:100%; height:100dvh; display:block; touch-action:none; }
   .hidden { display:none !important; }
   #enemyLabels { position:fixed; inset:0; z-index:2; overflow:hidden; pointer-events:none; }
   .enemy-hp { position:absolute; left:0; top:0; width:54px; height:12px; overflow:hidden; border:1.5px solid rgba(255,255,255,.95); border-radius:99px; background:rgba(43,35,64,.78); box-shadow:0 2px 5px rgba(0,0,0,.25); transform:translate3d(-100px,-100px,0); will-change:transform; }
@@ -41,8 +43,24 @@
   .timer small { display:block; font-size:11px; line-height:1; opacity:.85; }
   .score { justify-self:end; padding:5px 10px; border-radius:14px; background:rgba(43,35,64,.75); font-weight:800; text-align:right; }
   .score span { display:block; white-space:nowrap; }
-  #pause { position:absolute; right:12px; top:calc(82px + env(safe-area-inset-top)); width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
-  #enemyIntro { position:absolute; right:62px; top:calc(82px + env(safe-area-inset-top)); width:min(230px,62vw); padding:8px 10px; border:2px solid rgba(255,255,255,.9); border-radius:16px; background:rgba(255,250,242,.94); color:var(--ink); text-shadow:none; box-shadow:0 7px 20px rgba(43,35,64,.24); opacity:0; transform:translateX(14px) scale(.94); transform-origin:top right; transition:opacity .22s ease,transform .22s ease; }
+  #pause, #openAttrs { position:absolute; width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
+  #pause { right:12px; top:calc(82px + env(safe-area-inset-top)); }
+  #openAttrs { right:62px; top:calc(82px + env(safe-area-inset-top)); font-size:18px; }
+  #attrBadge { position:absolute; right:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; }
+  #attrSheet { position:fixed; inset:0; z-index:9; display:flex; align-items:flex-end; justify-content:center; padding:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom)); background:rgba(43,35,64,.45); touch-action:manipulation; }
+  #attrSheet .sheet { width:min(440px,100%); max-height:min(78dvh,560px); overflow:auto; padding:16px 16px 18px; border-radius:24px 24px 18px 18px; background:var(--card); box-shadow:0 -12px 40px rgba(0,0,0,.28); }
+  #attrSheet .sheet-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  #attrSheet .sheet-head h2 { margin:0; font-size:24px; line-height:1; }
+  #attrSheet .points { padding:3px 10px; border-radius:99px; background:#efe6ff; color:#6d28d9; font-weight:800; font-size:13px; white-space:nowrap; }
+  .attr-row { display:grid; grid-template-columns:44px minmax(0,1fr) auto; align-items:center; gap:10px; padding:10px; margin-top:8px; border:2px solid #eee3d3; border-radius:16px; background:#fff; text-align:left; }
+  .attr-icon { width:44px; height:44px; display:grid; place-items:center; border-radius:14px; background:#f3e8ff; font-size:24px; }
+  .attr-copy b { display:block; font-size:16px; line-height:1.1; }
+  .attr-copy small { display:block; color:#6b6280; font-size:12px; line-height:1.25; }
+  .attr-copy em { display:inline-block; margin-top:3px; color:#7c3aed; font-size:12px; font-style:normal; font-weight:800; }
+  .attr-plus { width:42px; height:42px; border:0; border-radius:14px; background:var(--accent); color:#fff; font-size:24px; font-weight:800; cursor:pointer; }
+  .attr-plus:disabled { opacity:.35; cursor:default; }
+  #attrClose { min-width:0; padding:8px 14px; border:0; border-radius:12px; background:#e6dccb; color:var(--ink); font-weight:800; cursor:pointer; }
+  #enemyIntro { position:absolute; right:112px; top:calc(82px + env(safe-area-inset-top)); width:min(230px,62vw); padding:8px 10px; border:2px solid rgba(255,255,255,.9); border-radius:16px; background:rgba(255,250,242,.94); color:var(--ink); text-shadow:none; box-shadow:0 7px 20px rgba(43,35,64,.24); opacity:0; transform:translateX(14px) scale(.94); transform-origin:top right; transition:opacity .22s ease,transform .22s ease; }
   #enemyIntro.show { opacity:1; transform:none; }
   .enemy-head { display:flex; align-items:center; gap:7px; }
   .enemy-icon { width:36px; height:36px; display:grid; place-items:center; flex:0 0 auto; border-radius:11px; background:#fee2e2; font-size:22px; }
@@ -93,7 +111,9 @@
     .hero { width:34vw; padding:5px 7px; }
     #heroName { font-size:13px; }
     .timer { min-width:86px; padding:3px 9px; font-size:23px; }
-    #enemyIntro { right:58px; top:calc(74px + env(safe-area-inset-top)); width:min(215px,60vw); padding:7px 8px; }
+    #enemyIntro { right:58px; top:calc(126px + env(safe-area-inset-top)); width:min(215px,60vw); padding:7px 8px; }
+    #pause, #openAttrs { top:calc(74px + env(safe-area-inset-top)); width:38px; height:38px; }
+    #openAttrs { right:56px; font-size:16px; }
     .enemy-stats { gap:3px; }
     .enemy-stats span { font-size:10px; padding-inline:2px; }
     .score { font-size:13px; padding:4px 7px; }
@@ -125,10 +145,25 @@
     <div class="timer"><span id="timer">00:00</span><small id="stage">MÀN 1</small></div>
     <div class="score"><span>☠ <b id="kills">0</b></span><span>◆ <b id="gems">0</b></span></div>
   </div>
+  <button id="openAttrs" aria-label="Thuộc tính nhân vật">👤<span id="attrBadge" class="hidden">0</span></button>
   <button id="pause" aria-label="Tạm dừng">Ⅱ</button>
   <div id="enemyIntro" class="hidden" aria-live="polite"></div>
   <div class="xp"><i id="xpFill"></i><span id="level">Cấp 1</span></div>
   <div id="hint">WASD hoặc kéo để di chuyển</div>
+</div>
+
+<div id="attrSheet" class="hidden" aria-label="Bảng thuộc tính">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>Thuộc tính</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="points">Điểm: <b id="attrPoints">0</b></span>
+        <button id="attrClose" type="button">Đóng</button>
+      </div>
+    </div>
+    <p style="margin:0 0 4px;color:#6b6280;font-size:13px;font-weight:700;text-align:left">Cộng điểm vào chỉ số cơ bản. Phần thưởng lên cấp vẫn cho kỹ năng đặc biệt hoặc thêm điểm.</p>
+    <div id="attrRows"></div>
+  </div>
 </div>
 
 <div id="joystick" class="hidden"><div id="stick"></div></div>
