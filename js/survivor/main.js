@@ -42,7 +42,12 @@ addEventListener('resize', resize);
 resize();
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && game.state === 'playing') game.togglePause();
+  if (document.hidden) {
+    if (game.state === 'playing') game.togglePause();
+    clock.getDelta();
+    return;
+  }
+  game.needsRender = true;
 });
 document.addEventListener('contextmenu', event => event.preventDefault());
 document.addEventListener('dblclick', event => event.preventDefault(), { passive:false });
@@ -52,6 +57,7 @@ for (const name of ['gesturestart','gesturechange','gestureend']) {
 
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
+  if (document.hidden) return;
   game.update(clock.getDelta());
   game.render();
 });

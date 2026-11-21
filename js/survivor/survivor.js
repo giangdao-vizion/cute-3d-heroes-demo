@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { byId } from '../catalog.js';
 import { selection } from '../state.js';
-import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower } from '../engine.js';
+import { spawnModel, Animator, addLights, makeTree, makeRock, makeFlower, isMobileGraphics } from '../engine.js';
 import { bindLobbyLinks } from '../lobby-nav.js';
 
 const ARENA = 27;
@@ -143,8 +143,10 @@ export class SurvivorGame {
     onProgress(0.08, 'Đang dựng đấu trường');
 
     const scene = this.scene = new THREE.Scene();
+    const mobile = isMobileGraphics();
     scene.background = new THREE.Color(0x9fd8ff);
-    scene.fog = new THREE.Fog(0x9fd8ff, 28, 62);
+    // Fog is fill-rate heavy on phones; keep a shorter band or skip it.
+    scene.fog = mobile ? null : new THREE.Fog(0x9fd8ff, 28, 62);
     this.camera = new THREE.PerspectiveCamera(innerHeight > innerWidth ? 50 : 45, innerWidth / innerHeight, 0.1, 160);
     this.sun = addLights(scene, 24);
     this.buildArena();
@@ -154,6 +156,7 @@ export class SurvivorGame {
     this.pickups = [];
     this.combatEffects = [];
     this.effectPool = { blast:[], chain:[] };
+    this.gemPool = new Map();
     this.pendingSpawns = 0;
     this.enemyGrid = new Map();
     this.enemyGridPool = [];
@@ -166,6 +169,9 @@ export class SurvivorGame {
     this.stageIndex = 0;
     this.spawnClock = 1.2;
     this.hintClock = 5;
+    this.labelClock = 0;
+    this.hudCache = {};
+    this.needsRender = true;
     this.currentIntro = null;
     this.introRemaining = 0;
     this.upgradeLevels = {};
@@ -212,17 +218,20 @@ export class SurvivorGame {
   buildArena() {
     const world = this.world = new THREE.Group();
     this.scene.add(world);
+    const mobile = isMobileGraphics();
+    const segs = mobile ? 48 : 72;
+    const FloorMat = mobile ? THREE.MeshLambertMaterial : THREE.MeshStandardMaterial;
     const grass = new THREE.Mesh(
-      new THREE.CircleGeometry(ARENA + 11, 72),
-      new THREE.MeshStandardMaterial({ color:0x79c968 })
+      new THREE.CircleGeometry(ARENA + 11, segs),
+      new FloorMat({ color:0x79c968 })
     );
     grass.rotation.x = -Math.PI / 2;
     grass.receiveShadow = true;
     world.add(grass);
 
     const floor = new THREE.Mesh(
-      new THREE.CircleGeometry(ARENA, 72),
-      new THREE.MeshStandardMaterial({ color:0x98d77d })
+      new THREE.CircleGeometry(ARENA, segs),
+      new FloorMat({ color:0x98d77d })
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0.006;
@@ -230,29 +239,32 @@ export class SurvivorGame {
     world.add(floor);
 
     const center = new THREE.Mesh(
-      new THREE.RingGeometry(3.8, 4.15, 48),
+      new THREE.RingGeometry(3.8, 4.15, mobile ? 32 : 48),
       new THREE.MeshBasicMaterial({ color:0xe8d6a7, transparent:true, opacity:0.65 })
     );
     center.rotation.x = -Math.PI / 2;
     center.position.y = 0.018;
     world.add(center);
 
-    for (let i = 0; i < 58; i++) {
-      const a = i / 58 * Math.PI * 2 + Math.random() * 0.04;
+    const treeCount = mobile ? 28 : 58;
+    for (let i = 0; i < treeCount; i++) {
+      const a = i / treeCount * Math.PI * 2 + Math.random() * 0.04;
       const r = ARENA + 2.5 + Math.random() * 7;
       const tree = makeTree(0.85 + Math.random() * 0.9);
       tree.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
       tree.rotation.y = Math.random() * Math.PI * 2;
       world.add(tree);
     }
-    for (let i = 0; i < 22; i++) {
+    const rockCount = mobile ? 12 : 22;
+    for (let i = 0; i < rockCount; i++) {
       const a = Math.random() * Math.PI * 2;
       const r = 7 + Math.random() * (ARENA - 9);
       const rock = makeRock(0.5 + Math.random() * 0.8);
       rock.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
       world.add(rock);
     }
-    for (let i = 0; i < 150; i++) {
+    const flowerCount = mobile ? 36 : 150;
+    for (let i = 0; i < flowerCount; i++) {
       const a = Math.random() * Math.PI * 2;
       const r = Math.sqrt(Math.random()) * (ARENA - 1);
       const flower = makeFlower();
@@ -435,12 +447,17 @@ export class SurvivorGame {
       this.hintClock -= dt;
       if (this.hintClock <= 0) this.ui.hint.style.opacity = '0';
       this.updateHud();
+      this.labelClock += dt;
+      if (this.labelClock >= 0.07) {
+        this.labelClock = 0;
+        this.updateEnemyLabels();
+      }
+      this.needsRender = true;
     }
     if (this.state !== 'levelup' && this.state !== 'paused') {
       this.hero.anim.update(dt);
       for (const enemy of this.enemies) enemy.anim.update(dt);
     }
-    this.updateEnemyLabels();
   }
 
   updateHero(dt) {
@@ -892,19 +909,28 @@ export class SurvivorGame {
 
   spawnGem(position, value) {
     const tier = GEM_TIERS.find(item => value >= item.min) || GEM_TIERS[GEM_TIERS.length - 1];
-    const material = tier.glow
-      ? new THREE.MeshBasicMaterial({ color:tier.color, toneMapped:false })
-      : new THREE.MeshStandardMaterial({ color:tier.color, emissive:tier.color, emissiveIntensity:0.5, roughness:0.4 });
-    const mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(tier.size, 0),
-      material
-    );
+    const key = `${tier.min}:${tier.size}:${tier.color}`;
+    let pool = this.gemPool.get(key);
+    if (!pool) {
+      pool = [];
+      this.gemPool.set(key, pool);
+    }
+    let mesh = pool.pop();
+    if (!mesh) {
+      mesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(tier.size, 0),
+        new THREE.MeshBasicMaterial({ color:tier.color, toneMapped:false })
+      );
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.rotation.z = Math.PI / 4;
+    }
+    mesh.visible = true;
     mesh.position.copy(position);
     mesh.position.y = 0.3;
-    mesh.rotation.z = Math.PI / 4;
-    mesh.castShadow = true;
+    mesh.scale.setScalar(1);
     this.scene.add(mesh);
-    this.pickups.push({ mesh, value, tier, age:0, phase:Math.random() * 6 });
+    this.pickups.push({ mesh, value, tier, poolKey:key, age:0, phase:Math.random() * 6, collected:false });
   }
 
   updatePickups(dt) {
@@ -915,22 +941,35 @@ export class SurvivorGame {
       pickup.mesh.rotation.y += dt * 3;
       pickup.mesh.position.y = 0.3 + Math.sin(pickup.phase) * 0.08;
       pickup.mesh.scale.setScalar(1 + Math.sin(pickup.phase * 1.3) * pickup.tier.pulse);
-      const distance = pickup.mesh.position.distanceTo(heroPos);
+      const dx = pickup.mesh.position.x - heroPos.x;
+      const dz = pickup.mesh.position.z - heroPos.z;
+      const distanceSq = dx * dx + dz * dz;
       const magnet = 2.2 * this.power.magnet;
-      if (distance < magnet) {
-        pickup.mesh.position.lerp(tmp2.set(heroPos.x, 0.7, heroPos.z), Math.min(1, dt * (3 + magnet / Math.max(distance, 0.2))));
+      if (distanceSq < magnet * magnet) {
+        const distance = Math.sqrt(distanceSq) || 0.001;
+        pickup.mesh.position.lerp(tmp2.set(heroPos.x, 0.7, heroPos.z), Math.min(1, dt * (3 + magnet / distance)));
       }
-      if (distance < this.hero.radius + 0.45 || pickup.age > 45) this.collectGem(pickup);
+      if (distanceSq < (this.hero.radius + 0.45) ** 2 || pickup.age > 45) this.collectGem(pickup);
     }
     this.pickups = this.pickups.filter(pickup => !pickup.collected);
+  }
+
+  releaseGem(pickup) {
+    if (!pickup?.mesh) return;
+    this.scene?.remove(pickup.mesh);
+    pickup.mesh.visible = false;
+    const pool = this.gemPool?.get(pickup.poolKey);
+    if (pool) pool.push(pickup.mesh);
+    else {
+      pickup.mesh.geometry.dispose();
+      pickup.mesh.material.dispose();
+    }
   }
 
   collectGem(pickup) {
     if (pickup.collected) return;
     pickup.collected = true;
-    this.scene.remove(pickup.mesh);
-    pickup.mesh.geometry.dispose();
-    pickup.mesh.material.dispose();
+    this.releaseGem(pickup);
     this.gems += pickup.value;
     this.xp += pickup.value;
     while (this.xp >= this.xpNeeded()) {
@@ -947,6 +986,7 @@ export class SurvivorGame {
 
   showLevelUp() {
     this.state = 'levelup';
+    this.needsRender = true;
     this.clearMovement();
     const available = UPGRADES.filter(card => (this.upgradeLevels[card.id] || 0) < card.max);
     if (!available.length) {
@@ -1003,15 +1043,18 @@ export class SurvivorGame {
       this.ui.modal.classList.remove('hidden');
       this.ui.modal.querySelector('#resume').onclick = () => this.togglePause();
       bindLobbyLinks(this.ui.modal);
+      this.needsRender = true;
     } else if (this.state === 'paused') {
       this.state = 'playing';
       this.ui.modal.classList.add('hidden');
+      this.needsRender = true;
     }
   }
 
   gameOver() {
     if (this.state === 'over') return;
     this.state = 'over';
+    this.needsRender = true;
     this.hero.dead = true;
     this.hero.hp = 0;
     this.hero.anim.play('death', { once:true, clamp:true });
@@ -1075,21 +1118,49 @@ export class SurvivorGame {
     tmp.set(pos.x, height, pos.z + offset);
     this.camera.position.lerp(tmp, Math.min(1, dt * 5));
     this.camera.lookAt(this.camera.position.x, 0.55, this.camera.position.z - offset);
-    this.sun.position.set(pos.x + 12, 22, pos.z + 10);
-    this.sun.target.position.copy(pos);
+    // Keep the sun fixed — moving it every frame rebuilds the shadow map and heats phones.
   }
 
   updateHud() {
-    const hpRatio = Math.max(0, this.hero.hp / this.hero.maxHp);
-    this.ui.hpFill.style.width = `${hpRatio * 100}%`;
-    this.ui.hpText.textContent = `${Math.ceil(Math.max(0, this.hero.hp))} / ${this.hero.maxHp}`;
-    this.ui.heroName.textContent = this.hero.entry.name;
-    this.ui.timer.textContent = this.formatTime(Math.floor(this.elapsed));
-    this.ui.stage.textContent = `MÀN ${this.stageIndex + 1}`;
-    this.ui.kills.textContent = this.kills;
-    this.ui.gems.textContent = this.gems;
-    this.ui.level.textContent = `Cấp ${this.level}`;
-    this.ui.xpFill.style.width = `${Math.min(100, this.xp / this.xpNeeded() * 100)}%`;
+    const cache = this.hudCache || (this.hudCache = {});
+    const hp = Math.ceil(Math.max(0, this.hero.hp));
+    const maxHp = this.hero.maxHp;
+    if (cache.hp !== hp || cache.maxHp !== maxHp) {
+      cache.hp = hp;
+      cache.maxHp = maxHp;
+      this.ui.hpFill.style.width = `${Math.max(0, hp / maxHp) * 100}%`;
+      this.ui.hpText.textContent = `${hp} / ${maxHp}`;
+    }
+    if (cache.name !== this.hero.entry.name) {
+      cache.name = this.hero.entry.name;
+      this.ui.heroName.textContent = cache.name;
+    }
+    const seconds = Math.floor(this.elapsed);
+    if (cache.seconds !== seconds) {
+      cache.seconds = seconds;
+      this.ui.timer.textContent = this.formatTime(seconds);
+    }
+    if (cache.stage !== this.stageIndex) {
+      cache.stage = this.stageIndex;
+      this.ui.stage.textContent = `MÀN ${this.stageIndex + 1}`;
+    }
+    if (cache.kills !== this.kills) {
+      cache.kills = this.kills;
+      this.ui.kills.textContent = this.kills;
+    }
+    if (cache.gems !== this.gems) {
+      cache.gems = this.gems;
+      this.ui.gems.textContent = this.gems;
+    }
+    if (cache.level !== this.level) {
+      cache.level = this.level;
+      this.ui.level.textContent = `Cấp ${this.level}`;
+    }
+    const xpPct = Math.min(100, this.xp / this.xpNeeded() * 100);
+    if (cache.xpPct !== xpPct) {
+      cache.xpPct = xpPct;
+      this.ui.xpFill.style.width = `${xpPct}%`;
+    }
   }
 
   formatTime(seconds) {
@@ -1111,7 +1182,10 @@ export class SurvivorGame {
   }
 
   render() {
-    if (this.scene && this.camera) this.renderer.render(this.scene, this.camera);
+    if (!this.scene || !this.camera) return;
+    if (!this.needsRender && this.state !== 'playing' && this.state !== 'loading') return;
+    this.renderer.render(this.scene, this.camera);
+    if (this.state !== 'playing' && this.state !== 'loading') this.needsRender = false;
   }
 
   disposeUnit(unit) {
@@ -1150,11 +1224,14 @@ export class SurvivorGame {
     this.introRemaining = 0;
     this.ui.enemyIntro?.classList.add('hidden');
     for (const projectile of this.projectiles || []) this.removeProjectile(projectile);
-    for (const pickup of this.pickups || []) {
-      this.scene.remove(pickup.mesh);
-      pickup.mesh.geometry.dispose();
-      pickup.mesh.material.dispose();
+    for (const pickup of this.pickups || []) this.releaseGem(pickup);
+    for (const pool of this.gemPool?.values?.() || []) {
+      for (const mesh of pool) {
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      }
     }
+    this.gemPool?.clear?.();
     for (const effect of this.combatEffects || []) {
       this.scene.remove(effect.mesh);
       effect.mesh.geometry.dispose();

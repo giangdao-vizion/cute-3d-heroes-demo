@@ -2,7 +2,7 @@
 // Bắn hòm để nhận quà, chọn cổng toán học (+lính, +% tốc bắn...), lên cấp chọn 1 trong 3 thẻ.
 import * as THREE from 'three';
 import { byId, CATALOG } from './catalog.js';
-import { spawnModel, loadModel, Animator, addLights, makeTree, makeRock } from './engine.js';
+import { spawnModel, loadModel, Animator, addLights, makeTree, makeRock, isMobileGraphics } from './engine.js';
 import { selection } from './state.js';
 
 const HALF = 4.5;          // nửa bề rộng cầu
@@ -217,7 +217,7 @@ export class Defense {
     this.layer.innerHTML = '';
     const scene = this.scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9fd8ff);
-    scene.fog = new THREE.Fog(0x9fd8ff, 40, 90);
+    scene.fog = isMobileGraphics() ? null : new THREE.Fog(0x9fd8ff, 40, 90);
     this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
     this.sun = addLights(scene, 30);
     this.sun.position.set(10, 26, 6); this.sun.target.position.set(0, 0, -18);
@@ -286,11 +286,14 @@ export class Defense {
     for (const side of [-1, 1]) {
       const bank = new THREE.Mesh(new THREE.BoxGeometry(60, 2, 140), new THREE.MeshStandardMaterial({ color: 0x7cc96a }));
       bank.position.set(side * (HALF + 14 + 30), -1.2, -30); bank.receiveShadow = true; s.add(bank);
-      for (let i = 0; i < 60; i++) {
+      const mobile = isMobileGraphics();
+      const treeCount = mobile ? 24 : 60;
+      for (let i = 0; i < treeCount; i++) {
         const t = makeTree(1 + Math.random() * 1.2);
         t.position.set(side * (HALF + 15 + Math.random() * 22), -0.2, 8 - Math.random() * 90); t.rotation.y = Math.random() * 6; s.add(t);
       }
-      for (let i = 0; i < 14; i++) {
+      const rockCount = mobile ? 8 : 14;
+      for (let i = 0; i < rockCount; i++) {
         const r = makeRock(0.8 + Math.random() * 1.4);
         r.position.set(side * (HALF + 3 + Math.random() * 9), -1.45, 4 - Math.random() * 80); s.add(r);
       }

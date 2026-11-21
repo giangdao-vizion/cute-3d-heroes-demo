@@ -35,6 +35,7 @@ function openSurvivorArena() {
   // Keep Sinh tồn in the same shell via iframe so the installed app stays fullscreen.
   mode = 'survivor';
   stopActiveMode();
+  stopRenderLoop();
   showAppChrome(false);
   $('home').classList.add('hidden');
   $('loading').classList.add('hidden');
@@ -140,16 +141,30 @@ async function ensure3D() {
     defense.onExit = () => setMode('home');
 
     clock = new THREE.Clock();
-    renderer.setAnimationLoop(() => {
-      const dt = Math.min(clock.getDelta(), 0.1);
-      if (mode === 'defense') { defense.update(dt); defense.render(); }
-      else if (mode === 'game') { game.update(dt); game.render(); }
-    });
+    startRenderLoop();
     resize();
     window.__app = { game, defense, setMode };
   })();
   return initializing;
 }
+
+function startRenderLoop() {
+  if (!renderer) return;
+  renderer.setAnimationLoop(() => {
+    if (document.hidden || mode === 'home' || mode === 'survivor') return;
+    const dt = Math.min(clock.getDelta(), 0.1);
+    if (mode === 'defense') { defense.update(dt); defense.render(); }
+    else if (mode === 'game') { game.update(dt); game.render(); }
+  });
+}
+
+function stopRenderLoop() {
+  renderer?.setAnimationLoop(null);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && (mode === 'game' || mode === 'defense')) startRenderLoop();
+});
 
 function showAppChrome(show) {
   $('c').classList.toggle('hidden', !show);
@@ -169,6 +184,7 @@ async function setMode(nextMode) {
   if (nextMode === 'home') {
     mode = 'home';
     stopActiveMode();
+    stopRenderLoop();
     showAppChrome(false);
     $('home').classList.remove('hidden');
     $('loading').classList.add('hidden');
@@ -189,6 +205,7 @@ async function setMode(nextMode) {
     mode = nextMode;
     stopActiveMode();
     mode = nextMode;
+    startRenderLoop();
     showAppChrome(true);
     $('tabGame').classList.toggle('on', nextMode === 'game');
     $('tabDefense').classList.toggle('on', nextMode === 'defense');
