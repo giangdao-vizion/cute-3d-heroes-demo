@@ -759,7 +759,7 @@ export class SurvivorGame {
       const key = e.key.toLowerCase();
       this.keys.add(key);
       if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) e.preventDefault();
-      if (this.state === 'levelup' && ['1','2','3'].includes(key)) this.chooseUpgrade(Number(key) - 1);
+      if (this.isLevelUpOpen() && ['1','2','3'].includes(key)) this.chooseUpgrade(Number(key) - 1);
       if (!e.repeat && key === 'c') this.toggleAttrSheet();
       if (!e.repeat && (key === 'p' || key === 'escape')) {
         if (this.attrSheetOpen) this.closeAttrSheet();
@@ -1573,7 +1573,7 @@ export class SurvivorGame {
   }
 
   openAttrSheet() {
-    if (!this.ui.attrSheet || this.state === 'levelup' || this.state === 'over' || this.state === 'loading') return;
+    if (!this.ui.attrSheet || this.state === 'over' || this.state === 'loading') return;
     // Giữ trận đấu chạy khi mở bảng — tạo áp lực thao tác nhanh.
     if (this.state === 'paused') {
       this.ui.modal.classList.add('hidden');
@@ -1683,7 +1683,12 @@ export class SurvivorGame {
       this.level++;
       this.pendingLevels++;
     }
-    if (this.pendingLevels > 0 && this.state === 'playing') this.showLevelUp();
+    if (this.pendingLevels <= 0 || this.state !== 'playing') return;
+    if (this.isLevelUpOpen()) {
+      if (this.ui.levelupQueue) this.ui.levelupQueue.textContent = String(this.pendingLevels);
+    } else {
+      this.showLevelUp();
+    }
   }
 
   checkSynergies() {
@@ -2785,25 +2790,44 @@ export class SurvivorGame {
     return 6 + (this.level - 1) * 7;
   }
 
-  showLevelUp() {
-    this.closeAttrSheet();
-    this.state = 'levelup';
-    this.needsRender = true;
-    this.clearMovement();
-    this.hand = this.buildLevelUpHand();
-    this.ui.modal.innerHTML = `
-      <div class="box levelup-box">
-        <h2>Lv ${this.level}</h2>
-        <div class="cards">${this.hand.map((card, i) => this.renderUpgradeCard(card, i)).join('')}</div>
-        <p class="levelup-hint">1 · 2 · 3</p>
-      </div>`;
-    this.ui.modal.classList.remove('hidden');
-    this.ui.modal.querySelectorAll('[data-card]').forEach(button => {
-      button.onclick = () => this.chooseUpgrade(Number(button.dataset.card));
-    });
+  isLevelUpOpen() {
+    return !!(this.hand?.length && this.ui.levelupDock && !this.ui.levelupDock.classList.contains('hidden'));
   }
 
-  /** Thẻ nâng cấp: tên trên · icon lớn giữa · 1–2 dòng stat EN dưới. */
+  showLevelUp() {
+    if (this.state !== 'playing' && this.state !== 'paused') return;
+    // Không đổi state / không modal — trận tiếp tục, thẻ hiện góc phải.
+    this.hand = this.buildLevelUpHand();
+    this.renderLevelUpDock();
+    this.flashEvent(`Lv ${this.level} · chọn thẻ`, 1.8);
+    this.needsRender = true;
+  }
+
+  renderLevelUpDock() {
+    const dock = this.ui.levelupDock;
+    const cardsEl = this.ui.levelupCards;
+    if (!dock || !cardsEl) return;
+    if (this.ui.levelupQueue) {
+      this.ui.levelupQueue.textContent = String(Math.max(1, this.pendingLevels || 1));
+    }
+    cardsEl.innerHTML = (this.hand || []).map((card, i) => this.renderUpgradeCard(card, i)).join('');
+    cardsEl.querySelectorAll('[data-card]').forEach(button => {
+      button.onclick = e => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.chooseUpgrade(Number(button.dataset.card));
+      };
+    });
+    dock.classList.remove('hidden');
+  }
+
+  hideLevelUpDock() {
+    this.hand = [];
+    this.ui.levelupDock?.classList.add('hidden');
+    if (this.ui.levelupCards) this.ui.levelupCards.innerHTML = '';
+  }
+
+  /** Thẻ góc màn hình: icon + tên + 1–2 dòng stat EN. */
   renderUpgradeCard(card, index) {
     const kind = card.kind === 'risk' ? 'risk' : card.kind === 'attr' ? 'attr' : '';
     const levelLabel = card.kind === 'attr'
@@ -2813,16 +2837,20 @@ export class SurvivorGame {
         : `Lv ${(this.upgradeLevels[card.id] || 0) + 1}/${card.max}`;
     const stats = (card.stats || []).slice(0, 2);
     const statsHtml = stats.map(line => `<span class="stat">${line}</span>`).join('');
-    return `<button class="card ${kind}" data-card="${index}" type="button">
-      <span class="card-name">${card.name}</span>
-      <span class="icon" aria-hidden="true">${card.icon}</span>
-      <span class="stats">${statsHtml}</span>
+    return `<button class="dock-card ${kind}" data-card="${index}" type="button">
+      <span class="dock-icon" aria-hidden="true">${card.icon}</span>
+      <span class="dock-body">
+        <span class="card-name">${card.name}</span>
+        <span class="stats">${statsHtml}</span>
+      </span>
       <em class="card-lv">${levelLabel}</em>
+      <span class="dock-key">${index + 1}</span>
     </button>`;
   }
 
   chooseUpgrade(index) {
-    if (this.state !== 'levelup') return;
+    if (!this.isLevelUpOpen()) return;
+    if (this.state !== 'playing' && this.state !== 'paused') return;
     const card = this.hand[index];
     if (!card) return;
     if (card.kind === 'attr') {
@@ -2838,10 +2866,9 @@ export class SurvivorGame {
         ? `${card.icon} ${card.name}`
         : `${card.icon} ${card.name} cấp ${this.upgradeLevels[card.id]}`);
     }
-    this.pendingLevels--;
-    this.ui.modal.classList.add('hidden');
+    this.pendingLevels = Math.max(0, this.pendingLevels - 1);
     if (this.pendingLevels > 0) this.showLevelUp();
-    else this.state = 'playing';
+    else this.hideLevelUpDock();
     this.updateHud();
   }
 
@@ -2866,6 +2893,7 @@ export class SurvivorGame {
     if (this.state === 'over') return;
     this.state = 'over';
     this.needsRender = true;
+    this.hideLevelUpDock();
     this.hero.dead = true;
     this.hero.hp = 0;
     this.hero.anim.play('death', { once:true, clamp:true });
@@ -3065,6 +3093,7 @@ export class SurvivorGame {
   cleanupScene() {
     if (!this.scene) return;
     this.cleanupAttrUi();
+    this.hideLevelUpDock();
     this.currentIntro = null;
     this.introRemaining = 0;
     this.ui.enemyIntro?.classList.add('hidden');

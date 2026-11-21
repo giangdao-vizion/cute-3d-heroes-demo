@@ -59,6 +59,60 @@
   .score { justify-self:end; padding:5px 10px; border-radius:14px; background:rgba(43,35,64,.75); font-weight:800; text-align:right; }
   .score span { display:block; white-space:nowrap; }
   #pause { position:absolute; right:12px; top:calc(82px + env(safe-area-inset-top)); width:42px; height:42px; padding:0; border:3px solid #fff; border-radius:50%; background:rgba(43,35,64,.75); color:#fff; pointer-events:auto; cursor:pointer; }
+  /* Thẻ nâng cấp góc màn hình — không dừng trận, không che giữa sân. */
+  #levelupDock {
+    position:absolute; right:10px; top:calc(132px + env(safe-area-inset-top));
+    width:min(148px,42vw); max-height:min(52dvh,420px); overflow:auto;
+    padding:6px; border-radius:16px; background:rgba(43,35,64,.55);
+    border:2px solid rgba(255,255,255,.35); box-shadow:0 8px 22px rgba(0,0,0,.22);
+    pointer-events:auto; text-shadow:none; z-index:5;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  }
+  #levelupDock.hidden { display:none !important; }
+  .levelup-dock-head {
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    margin:0 2px 6px; color:#fff; font-size:11px; font-weight:800; letter-spacing:.06em;
+  }
+  .levelup-dock-head b {
+    min-width:18px; height:18px; padding:0 5px; border-radius:99px;
+    background:#7c3aed; border:1.5px solid #fff; font-size:11px; line-height:15px; text-align:center;
+  }
+  .levelup-dock-cards { display:flex; flex-direction:column; gap:5px; }
+  .dock-card {
+    position:relative; display:grid; grid-template-columns:36px minmax(0,1fr); gap:6px; align-items:center;
+    width:100%; min-height:54px; padding:6px 6px 6px 5px; border:2px solid #e7dcc8; border-radius:12px;
+    background:linear-gradient(180deg,#fffefb 0%,#fff7ea 100%); color:var(--ink); cursor:pointer;
+    box-shadow:0 3px 0 #e0d3bc; text-align:left; appearance:none; font:inherit;
+  }
+  .dock-card:active { transform:scale(.97); }
+  .dock-card .dock-icon {
+    width:36px; height:36px; display:grid; place-items:center; border-radius:10px;
+    background:rgba(43,35,64,.06); font-size:22px; line-height:1;
+  }
+  .dock-card .dock-body { min-width:0; }
+  .dock-card .card-name {
+    display:block; font-size:11px; font-weight:800; line-height:1.15;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .dock-card .stats { display:flex; flex-direction:column; gap:1px; margin-top:2px; }
+  .dock-card .stat {
+    display:block; font-size:10px; font-weight:800; line-height:1.15; letter-spacing:.01em;
+    color:#0f766e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .dock-card .card-lv {
+    position:absolute; right:4px; top:3px; margin:0; padding:0 5px; border-radius:99px;
+    background:#efe6ff; color:#6d28d9; font-size:8px; font-style:normal; font-weight:800;
+  }
+  .dock-card .dock-key {
+    position:absolute; right:4px; bottom:3px; width:14px; height:14px; border-radius:5px;
+    background:rgba(43,35,64,.12); color:#6b6280; font-size:9px; font-weight:800;
+    display:grid; place-items:center;
+  }
+  .dock-card.attr { border-color:#c4b5fd; box-shadow:0 3px 0 #c4b5fd; background:linear-gradient(180deg,#faf5ff,#ede9fe); }
+  .dock-card.attr .stat { color:#6d28d9; }
+  .dock-card.risk { border-color:#f59e0b; box-shadow:0 3px 0 #f59e0b; background:linear-gradient(180deg,#fffbeb,#ffedd5); }
+  .dock-card.risk .stat { color:#c2410c; }
+  .dock-card.risk .card-lv { background:#ffedd5; color:#c2410c; }
   #attrBadge { position:absolute; left:-6px; top:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:99px; background:#ef4444; border:2px solid #fff; color:#fff; font:800 10px/14px 'Baloo 2',system-ui; z-index:1; }
   #attrSheet { position:fixed; inset:0; z-index:9; display:flex; align-items:flex-end; justify-content:center; padding:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom)); background:rgba(43,35,64,.45); touch-action:manipulation; }
   #attrSheet .sheet { width:min(440px,100%); max-height:min(84dvh,640px); overflow:auto; padding:16px 16px 18px; border-radius:24px 24px 18px 18px; background:var(--card); box-shadow:0 -12px 40px rgba(0,0,0,.28); }
@@ -101,42 +155,7 @@
   .box h1 { font-size:38px; color:var(--accent); }
   .box h2 { font-size:30px; }
   .box p { margin:6px 0 14px; color:#6b6280; }
-  .levelup-box { width:min(440px,100%); padding:14px 12px 12px; }
-  .levelup-box h2 { margin:0; font-size:22px; letter-spacing:.04em; }
-  .levelup-hint { margin:10px 0 0 !important; font-size:12px; font-weight:800; letter-spacing:.12em; color:#9b92ad !important; }
   .cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:12px; }
-  .card {
-    position:relative; display:flex; flex-direction:column; align-items:center;
-    min-width:0; min-height:196px; padding:10px 6px 10px;
-    border:3px solid #e7dcc8; border-radius:18px; background:linear-gradient(180deg,#fffefb 0%,#fff7ea 100%);
-    color:var(--ink); cursor:pointer; box-shadow:0 5px 0 #e0d3bc;
-  }
-  .card:hover, .card:focus-visible { transform:translateY(-3px); border-color:#a78bfa; outline:none; }
-  .card .card-name {
-    width:100%; min-height:2.4em; padding:0 2px;
-    font-size:12px; font-weight:800; line-height:1.2; letter-spacing:.01em;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
-  }
-  .card .icon {
-    flex:1 1 auto; display:grid; place-items:center; width:100%;
-    margin:4px 0 2px; font-size:52px; line-height:1;
-    filter:drop-shadow(0 3px 0 rgba(43,35,64,.12));
-  }
-  .card .stats { display:flex; flex-direction:column; align-items:center; gap:2px; width:100%; min-height:2.4em; }
-  .card .stat {
-    display:block; padding:2px 6px; border-radius:8px;
-    background:rgba(15,118,110,.1); color:#0f766e;
-    font-size:11px; font-weight:800; letter-spacing:.02em; line-height:1.2; white-space:nowrap;
-  }
-  .card .card-lv, .card em {
-    display:inline-block; margin-top:7px; padding:1px 8px; border-radius:99px;
-    background:#efe6ff; color:#6d28d9; font-size:10px; font-style:normal; font-weight:800; letter-spacing:.04em;
-  }
-  .card.attr { border-color:#c4b5fd; box-shadow:0 5px 0 #c4b5fd; background:linear-gradient(180deg,#faf5ff 0%,#ede9fe 100%); }
-  .card.attr .stat { background:rgba(109,40,217,.12); color:#6d28d9; }
-  .card.risk { border-color:#f59e0b; box-shadow:0 5px 0 #f59e0b; background:linear-gradient(180deg,#fffbeb 0%,#ffedd5 100%); }
-  .card.risk .stat { background:rgba(194,65,12,.12); color:#c2410c; }
-  .card.risk .card-lv, .card.risk em { background:#ffedd5; color:#c2410c; }
   #eventBanner { position:absolute; left:50%; bottom:calc(34px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:min(92vw,420px); padding:7px 14px; border:2px solid rgba(255,255,255,.92); border-radius:99px; background:rgba(43,35,64,.82); color:#fff; font-size:14px; font-weight:800; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; }
   .actions { display:flex; justify-content:center; flex-wrap:wrap; gap:9px; margin-top:15px; }
   .actions button, .actions a { min-width:128px; padding:9px 18px; border:0; border-radius:14px; background:var(--accent); color:#fff; font-weight:800; font-size:18px; cursor:pointer; text-decoration:none; }
@@ -161,14 +180,11 @@
     .enemy-stats { gap:3px; }
     .enemy-stats span { font-size:10px; padding-inline:2px; }
     .score { font-size:13px; padding:4px 7px; }
-    .cards { gap:5px; }
-    .card { min-height:178px; padding:8px 3px 8px; border-radius:14px; }
-    .card .card-name { font-size:11px; min-height:2.3em; }
-    .card .icon { font-size:44px; }
-    .card .stat { font-size:10px; padding:2px 4px; }
-    .card .card-lv, .card em { font-size:9px; margin-top:5px; }
-    .levelup-box { padding:12px 8px 10px; }
-    .levelup-box h2 { font-size:20px; }
+    #levelupDock { width:min(136px,40vw); top:calc(120px + env(safe-area-inset-top)); padding:5px; }
+    .dock-card { min-height:50px; padding:5px; gap:5px; }
+    .dock-card .dock-icon { width:32px; height:32px; font-size:20px; }
+    .dock-card .card-name { font-size:10px; }
+    .dock-card .stat { font-size:9px; }
   }
 </style>
 <script type="importmap">
@@ -194,6 +210,10 @@
     <div class="score"><span>☠ <b id="kills">0</b></span><span>◆ <b id="gems">0</b></span></div>
   </div>
   <button id="pause" aria-label="Tạm dừng">Ⅱ</button>
+  <div id="levelupDock" class="hidden" aria-live="polite">
+    <div class="levelup-dock-head"><span>PICK</span><b id="levelupQueue">1</b></div>
+    <div class="levelup-dock-cards" id="levelupCards"></div>
+  </div>
   <div id="enemyIntro" class="hidden" aria-live="polite"></div>
   <div class="xp"><i id="xpFill"></i><span id="level">Cấp 1</span></div>
   <div id="eventBanner" class="hidden" aria-live="polite"></div>
