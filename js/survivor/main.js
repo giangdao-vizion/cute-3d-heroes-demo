@@ -6,6 +6,7 @@ const $ = id => document.getElementById(id);
 const renderer = makeRenderer($('c'));
 const ui = {
   hud:$('hud'),
+  enemyLabels:$('enemyLabels'),
   heroName:$('heroName'),
   hpFill:$('hpFill'),
   hpText:$('hpText'),

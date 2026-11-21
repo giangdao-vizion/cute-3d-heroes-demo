@@ -38,6 +38,7 @@ Cần internet lần đầu để tải Three.js và font từ CDN. Model nằm 
 | Ultimate Animated Animals | Quaternius | Shiba, Cáo, Husky | https://quaternius.com/packs/ultimateanimatedanimals.html |
 | Dungeon Remastered 1.0 | Kay Lousberg (KayKit) | Rương, chồng vàng, khiên kiếm (icon + hòm quà trong Giữ cổng) | https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0 |
 | Platformer Game Kit, Modular Weapons, Modular Dungeon | Quaternius | Sao, ngọc, tim, bom, kiếm vàng, khiên, đầu lâu, bình thuốc (icon) | https://quaternius.com/packs/ultimateplatformer.html |
+| Sunfall Rift – Ember projectile | 3DAssets.dev | Model cầu lửa GLB 56 tam giác dùng trong Đấu trường sinh tồn | https://3dassets.dev/assets/sunfall-rift-moba-ember-projectile-49569ecb |
 
 File GLB lấy từ GitHub: `KayKit-Game-Assets/KayKit-Character-Pack-*-1.0` và bản GLB đã chuyển sẵn ở `trebeljahr/quaternius-showcase`.
 

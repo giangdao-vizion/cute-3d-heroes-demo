@@ -8,6 +8,12 @@ const ENEMY_CAP = 55;
 const STAGE_DURATION = 50;
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const FIREBALL_ENTRY = {
+  id:'ember_projectile',
+  file:'models/props/ember_projectile.glb',
+  height:0.78,
+};
 
 const ENEMY_VARIANTS = {
   sprout: { entryId:'Enemy', name:'Mầm xanh', icon:'🌱', hp:24, defense:0, speed:1.75, dmg:4, scale:1, gem:1 },
@@ -163,6 +169,11 @@ export class SurvivorGame {
     await Promise.all(['Enemy','Rat','Skeleton_Minion'].map(id => spawnModel(byId[id])));
     if (runId !== this.runId) return;
 
+    onProgress(0.68, 'Đang nạp cầu lửa');
+    const fireball = await spawnModel(FIREBALL_ENTRY, FIREBALL_ENTRY.height);
+    if (runId !== this.runId) return;
+    this.prepareFireball(fireball.root);
+
     onProgress(0.82, 'Chuẩn bị chiến đấu');
     await Promise.all([this.spawnEnemy('sprout'), this.spawnEnemy('sprout')]);
     if (runId !== this.runId) return;
@@ -239,6 +250,44 @@ export class SurvivorGame {
     ring.position.y = 0.025;
     root.add(ring);
     return { entry, root, model, anim, ring, radius, ...stats, hp:stats.hp || 1, maxHp:stats.hp || 1, dead:false };
+  }
+
+  prepareFireball(root) {
+    this.fireballMaterials = new Set();
+    this.fireballGeometries = new Set();
+    root.traverse(object => {
+      if (!object.isMesh) return;
+      const materials = [].concat(object.material).map(material => {
+        const clone = material.clone();
+        clone.emissive?.set(0xff4d00);
+        if (clone.emissiveIntensity !== undefined) clone.emissiveIntensity = 2.2;
+        this.fireballMaterials.add(clone);
+        return clone;
+      });
+      object.material = Array.isArray(object.material) ? materials : materials[0];
+      object.castShadow = false;
+    });
+    const trail = [
+      { radius:0.16, y:0.34, color:0xfff1a8, opacity:0.92 },
+      { radius:0.13, y:0.02, color:0xff8a1f, opacity:0.72 },
+      { radius:0.09, y:-0.20, color:0xef3b0a, opacity:0.5 },
+    ];
+    for (const part of trail) {
+      const geometry = new THREE.SphereGeometry(part.radius, 8, 6);
+      const material = new THREE.MeshBasicMaterial({
+        color:part.color, transparent:true, opacity:part.opacity,
+        depthWrite:false, blending:THREE.AdditiveBlending,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.y = part.y;
+      root.add(mesh);
+      this.fireballGeometries.add(geometry);
+      this.fireballMaterials.add(material);
+    }
+    root.position.y = -FIREBALL_ENTRY.height * 0.5;
+    const template = new THREE.Group();
+    template.add(root);
+    this.fireballTemplate = template;
   }
 
   updateRangeRing() {
@@ -332,6 +381,7 @@ export class SurvivorGame {
       this.hero.anim.update(dt);
       for (const enemy of this.enemies) enemy.anim.update(dt);
     }
+    this.updateEnemyLabels();
   }
 
   updateHero(dt) {
@@ -379,23 +429,17 @@ export class SurvivorGame {
   }
 
   makeProjectile(target) {
-    const heroId = this.hero.entry.id;
-    const colors = { Mage:0xa855f7, Rogue:0xf97316, Rogue_Hooded:0xfbbf24, Barbarian:0xef4444, Knight:0x60a5fa };
-    const color = colors[heroId] || 0xfbbf24;
-    const radius = 0.2 * this.power.size;
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(radius, 10, 8),
-      new THREE.MeshBasicMaterial({ color })
-    );
+    const radius = 0.24 * this.power.size;
+    const mesh = this.fireballTemplate.clone(true);
     mesh.position.copy(this.hero.root.position);
     mesh.position.y = 0.85;
-    const glow = new THREE.PointLight(color, 1.8, 3);
-    mesh.add(glow);
-    this.scene.add(mesh);
     tmp.copy(target.root.position).sub(this.hero.root.position);
     tmp.y = 0;
     if (tmp.lengthSq() < 0.001) tmp.set(0, 0, -1);
     tmp.normalize();
+    mesh.quaternion.setFromUnitVectors(Y_AXIS, tmp);
+    mesh.scale.setScalar(this.power.size);
+    this.scene.add(mesh);
     const speed = 14;
     const curveSign = Math.random() < 0.5 ? -1 : 1;
     this.projectiles.push({
@@ -408,6 +452,8 @@ export class SurvivorGame {
       damage:this.hero.dmg * this.power.damage,
       hits:new Set(), remaining:this.power.pierce,
       radius:radius + 0.18,
+      age:Math.random() * Math.PI * 2,
+      visualScale:this.power.size,
     });
   }
 
@@ -417,6 +463,7 @@ export class SurvivorGame {
       const steps = Math.max(1, Math.ceil(travel / 0.32));
       const stepDt = dt / steps;
       for (let step = 0; step < steps && !projectile.removed; step++) {
+        projectile.age += stepDt * 12;
         projectile.velocity.addScaledVector(projectile.curve, stepDt);
         tmp.copy(projectile.velocity).multiplyScalar(stepDt);
         const remainingDistance = projectile.maxDistance - projectile.distance;
@@ -427,7 +474,9 @@ export class SurvivorGame {
         if (tmp.length() > remainingDistance) tmp.setLength(remainingDistance);
         projectile.mesh.position.add(tmp);
         projectile.distance += tmp.length();
-        projectile.mesh.rotation.y += stepDt * 8;
+        tmp2.copy(projectile.velocity).normalize();
+        projectile.mesh.quaternion.setFromUnitVectors(Y_AXIS, tmp2);
+        projectile.mesh.scale.setScalar(projectile.visualScale * (1 + Math.sin(projectile.age) * 0.07));
 
         for (const enemy of this.enemies) {
           if (enemy.dead || projectile.hits.has(enemy)) continue;
@@ -451,8 +500,6 @@ export class SurvivorGame {
     if (projectile.removed) return;
     projectile.removed = true;
     this.scene.remove(projectile.mesh);
-    projectile.mesh.geometry.dispose();
-    projectile.mesh.material.dispose();
   }
 
   showEnemyIntro(variantId, duration = 5, stageNumber = this.stageIndex + 1) {
@@ -563,10 +610,57 @@ export class SurvivorGame {
     unit.root.rotation.y += delta * Math.min(1, dt * speed);
   }
 
+  ensureEnemyHealth(enemy) {
+    if (enemy.healthLabel) return enemy.healthLabel;
+    const label = document.createElement('div');
+    label.className = 'enemy-hp';
+    label.innerHTML = '<i></i><b></b>';
+    this.ui.enemyLabels.appendChild(label);
+    enemy.healthLabel = label;
+    enemy.healthFill = label.querySelector('i');
+    enemy.healthText = label.querySelector('b');
+    return label;
+  }
+
+  updateEnemyHealth(enemy) {
+    if (!enemy.healthLabel) return;
+    const ratio = Math.max(0, enemy.hp / enemy.maxHp);
+    enemy.healthFill.style.transform = `scaleX(${ratio})`;
+    enemy.healthText.textContent = `${Math.ceil(Math.max(0, enemy.hp))}`;
+  }
+
+  updateEnemyLabels() {
+    const width = innerWidth, height = innerHeight;
+    for (const enemy of this.enemies) {
+      const label = enemy.healthLabel;
+      if (!label || enemy.dead) continue;
+      tmp.copy(enemy.root.position);
+      tmp.y = enemy.root.userData.height * enemy.visualScale + 0.28;
+      tmp.project(this.camera);
+      const visible = tmp.z > -1 && tmp.z < 1 && Math.abs(tmp.x) < 1.12 && Math.abs(tmp.y) < 1.12;
+      if (visible !== enemy.healthLabelVisible) {
+        enemy.healthLabelVisible = visible;
+        label.style.display = visible ? '' : 'none';
+      }
+      if (!visible) continue;
+      const x = Math.round((tmp.x * 0.5 + 0.5) * width);
+      const y = Math.round((-tmp.y * 0.5 + 0.5) * height);
+      label.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
+    }
+  }
+
   hitEnemy(enemy, amount) {
     if (enemy.dead) return;
     enemy.hp -= Math.max(1, amount - enemy.defense);
+    if (enemy.hp > 0) {
+      this.ensureEnemyHealth(enemy);
+      this.updateEnemyHealth(enemy);
+    }
     if (enemy.hp <= 0) {
+      enemy.healthLabel?.remove();
+      enemy.healthLabel = null;
+      enemy.healthFill = null;
+      enemy.healthText = null;
       enemy.dead = true;
       enemy.deadTime = 0;
       enemy.anim.play('death', { once:true, clamp:true });
@@ -795,6 +889,7 @@ export class SurvivorGame {
     this.camera.aspect = width / height;
     this.camera.fov = height > width ? 50 : 45;
     this.camera.updateProjectionMatrix();
+    this.updateEnemyLabels();
   }
 
   render() {
@@ -804,6 +899,10 @@ export class SurvivorGame {
   disposeUnit(unit) {
     if (!unit || unit.disposed) return;
     unit.disposed = true;
+    unit.healthLabel?.remove();
+    unit.healthLabel = null;
+    unit.healthFill = null;
+    unit.healthText = null;
     this.scene?.remove(unit.root);
     if (unit.ring) {
       unit.root.remove(unit.ring);
@@ -835,6 +934,11 @@ export class SurvivorGame {
     }
     this.disposeUnit(this.hero);
     for (const enemy of this.enemies || []) this.disposeUnit(enemy);
+    for (const geometry of this.fireballGeometries || []) geometry.dispose();
+    for (const material of this.fireballMaterials || []) material.dispose();
+    this.fireballTemplate = null;
+    this.fireballGeometries = null;
+    this.fireballMaterials = null;
     if (this.world) {
       const geometries = new Set();
       const materials = new Set();
@@ -847,6 +951,7 @@ export class SurvivorGame {
     }
     this.sun?.shadow.map?.dispose();
     this.scene.clear();
+    if (this.ui.enemyLabels) this.ui.enemyLabels.textContent = '';
     this.scene = null;
     this.world = null;
     this.hero = null;

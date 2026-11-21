@@ -13,6 +13,10 @@
   button, a { font:inherit; }
   canvas { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
   .hidden { display:none !important; }
+  #enemyLabels { position:fixed; inset:0; z-index:2; overflow:hidden; pointer-events:none; }
+  .enemy-hp { position:absolute; left:0; top:0; width:54px; height:12px; overflow:hidden; border:1.5px solid rgba(255,255,255,.95); border-radius:99px; background:rgba(43,35,64,.78); box-shadow:0 2px 5px rgba(0,0,0,.25); transform:translate3d(-100px,-100px,0); will-change:transform; }
+  .enemy-hp i { display:block; width:100%; height:100%; background:linear-gradient(90deg,#ef4444,#fb7185); transform-origin:left center; }
+  .enemy-hp b { position:absolute; inset:0; display:grid; place-items:center; color:#fff; font:800 9px/1 'Baloo 2',system-ui; text-align:center; text-shadow:0 1px 2px #000; }
 
   #hud { position:fixed; inset:0; z-index:3; pointer-events:none; padding:env(safe-area-inset-top) 10px env(safe-area-inset-bottom); color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.35); }
   .top { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:10px; right:10px; display:grid; grid-template-columns:minmax(100px,1fr) auto minmax(100px,1fr); align-items:start; gap:8px; }
@@ -98,6 +102,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="enemyLabels"></div>
 
 <div id="hud" class="hidden">
   <div class="top">
