@@ -25,11 +25,11 @@ const ENEMY_VARIANTS = {
 };
 
 const STAGES = [
-  { name:'Mầm non', featured:'sprout', pool:['sprout'], interval:1.55, cap:14 },
-  { name:'Lực sĩ', featured:'sproutBrute', pool:['sprout','sprout','sproutBrute'], interval:1.38, cap:18 },
-  { name:'Trinh sát', featured:'ratScout', pool:['sprout','sproutBrute','ratScout','ratScout'], interval:1.22, cap:22 },
-  { name:'Vệ binh', featured:'skeletonGuard', pool:['sproutBrute','ratScout','skeletonGuard'], interval:1.08, cap:27 },
-  { name:'Đột kích', featured:'skeletonRaider', pool:['ratScout','skeletonGuard','skeletonRaider','skeletonRaider'], interval:0.94, cap:32 },
+  { name:'Mầm non', featured:'sprout', pool:['sprout'], interval:1.55, cap:14, pack:1 },
+  { name:'Lực sĩ', featured:'sproutBrute', pool:['sprout','sprout','sproutBrute'], interval:1.38, cap:18, pack:1 },
+  { name:'Trinh sát', featured:'ratScout', pool:['sprout','sproutBrute','ratScout','ratScout'], interval:1.22, cap:24, pack:2 },
+  { name:'Vệ binh', featured:'skeletonGuard', pool:['sproutBrute','ratScout','skeletonGuard'], interval:1.08, cap:31, pack:2 },
+  { name:'Đột kích', featured:'skeletonRaider', pool:['ratScout','skeletonGuard','skeletonRaider','skeletonRaider'], interval:0.94, cap:38, pack:3 },
 ];
 
 const GEM_TIERS = [
@@ -50,6 +50,9 @@ const UPGRADES = [
   { id:'magnet', icon:'◆', name:'Nam châm', desc:'+35% phạm vi hút ngọc', max:4, apply:g => { g.power.magnet *= 1.35; g.updateMagnetRing(); } },
   { id:'armor', icon:'⬟', name:'Giáp hộ mệnh', desc:'Giảm 12% sát thương nhận', max:4, apply:g => { g.power.armor *= 0.88; } },
   { id:'range', icon:'◎', name:'Tầm bắn', desc:'+15% tầm bắn', max:5, apply:g => { g.power.range *= 1.15; g.updateRangeRing(); } },
+  { id:'chain', icon:'ϟ', name:'Sét lan', desc:'Tia sét lan thêm 1 quái gần đó', max:4, apply:g => { g.power.chain++; } },
+  { id:'blast', icon:'✹', name:'Nổ lan', desc:'Fireball gây nổ quanh mục tiêu', max:4, apply:g => { g.power.blast++; } },
+  { id:'freeze', icon:'❄', name:'Băng giá', desc:'Làm chậm, có cơ hội đóng băng quái', max:4, apply:g => { g.power.freeze++; } },
 ];
 
 function easeOutBack(x) {
@@ -148,6 +151,11 @@ export class SurvivorGame {
     this.enemies = [];
     this.projectiles = [];
     this.pickups = [];
+    this.combatEffects = [];
+    this.effectPool = { blast:[], chain:[] };
+    this.pendingSpawns = 0;
+    this.enemyGrid = new Map();
+    this.enemyGridPool = [];
     this.elapsed = 0;
     this.kills = 0;
     this.gems = 0;
@@ -160,7 +168,11 @@ export class SurvivorGame {
     this.currentIntro = null;
     this.introRemaining = 0;
     this.upgradeLevels = {};
-    this.power = { damage:1, interval:0.72, multi:1, pierce:0, size:1, magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1 };
+    this.power = {
+      damage:1, interval:0.72, multi:1, pierce:0, size:1,
+      magnet:1, range:BASE_ATTACK_RANGE, attackClock:0.4, armor:1,
+      chain:0, blast:0, freeze:0,
+    };
 
     const heroEntry = byId[selection.hero] || byId.Knight;
     onProgress(0.25, `Đang tải ${heroEntry.name}`);
@@ -353,12 +365,19 @@ export class SurvivorGame {
   }
 
   async spawnEnemy(variantId) {
-    if (!this.scene || this.enemies.filter(e => !e.dead).length >= ENEMY_CAP) return;
+    const alive = this.enemies.filter(e => !e.dead).length;
+    if (!this.scene || alive + this.pendingSpawns >= ENEMY_CAP) return;
+    this.pendingSpawns++;
     const runId = this.runId;
     const variant = ENEMY_VARIANTS[variantId] || ENEMY_VARIANTS.sprout;
     const entry = byId[variant.entryId] || byId.Enemy;
-    const model = await spawnModel(entry);
-    if (runId !== this.runId || !this.scene) return;
+    let model;
+    try {
+      model = await spawnModel(entry);
+    } finally {
+      this.pendingSpawns = Math.max(0, this.pendingSpawns - 1);
+    }
+    if (runId !== this.runId || !this.scene || this.enemies.filter(e => !e.dead).length >= ENEMY_CAP) return;
     const stats = this.variantStats(variant);
     const enemy = this.makeUnit(entry, model, {
       ...entry.stats,
@@ -376,6 +395,9 @@ export class SurvivorGame {
     enemy.radius *= variant.scale;
     enemy.spawn = 0;
     enemy.hitFlash = 0;
+    enemy.slowT = 0;
+    enemy.slowFactor = 1;
+    enemy.paralyzeT = 0;
     const heroPos = this.hero?.root.position || tmp.set(0,0,0);
     let placed = false;
     for (let attempt = 0; attempt < 16; attempt++) {
@@ -405,6 +427,7 @@ export class SurvivorGame {
       this.updateSpawner(dt);
       this.updateEnemies(dt);
       this.updateProjectiles(dt);
+      this.updateCombatEffects(dt);
       this.updatePickups(dt);
       this.updateEnemyIntro(dt);
       this.updateCamera(dt);
@@ -486,6 +509,7 @@ export class SurvivorGame {
       maxDistance:this.power.range,
       damage:this.hero.dmg * this.power.damage,
       hits:new Set(), remaining:this.power.pierce,
+      secondaryHits:new Set(),
       radius:radius + 0.18,
       age:Math.random() * Math.PI * 2,
       visualScale:this.power.size,
@@ -520,6 +544,7 @@ export class SurvivorGame {
           const hitRadius = enemy.radius + projectile.radius;
           if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
           this.hitEnemy(enemy, projectile.damage);
+          this.applyProjectileEffects(enemy, projectile.damage, projectile);
           projectile.hits.add(enemy);
           if (projectile.remaining > 0) projectile.remaining--;
           else this.removeProjectile(projectile);
@@ -535,6 +560,109 @@ export class SurvivorGame {
     if (projectile.removed) return;
     projectile.removed = true;
     this.scene.remove(projectile.mesh);
+  }
+
+  applyProjectileEffects(primary, damage, projectile) {
+    const P = this.power;
+    const origin = primary.root.position.clone();
+    projectile.secondaryHits.add(primary);
+
+    if (P.freeze > 0 && !primary.dead) {
+      primary.slowT = Math.max(primary.slowT, 1.4 + P.freeze * 0.35);
+      primary.slowFactor = Math.min(primary.slowFactor, Math.max(0.38, 0.82 - P.freeze * 0.1));
+      if (Math.random() < 0.06 + P.freeze * 0.04) {
+        primary.paralyzeT = Math.max(primary.paralyzeT, 0.45 + P.freeze * 0.1);
+      }
+    }
+
+    if (P.blast > 0) {
+      const radius = 1.2 + P.blast * 0.35;
+      const splashDamage = damage * (0.25 + P.blast * 0.05);
+      for (const enemy of this.enemies) {
+        if (enemy.dead || projectile.secondaryHits.has(enemy)) continue;
+        if (enemy.root.position.distanceToSquared(origin) <= radius * radius) {
+          projectile.secondaryHits.add(enemy);
+          this.hitEnemy(enemy, splashDamage);
+        }
+      }
+      this.addBlastEffect(origin, radius);
+    }
+
+    if (P.chain > 0) {
+      const used = projectile.secondaryHits;
+      const chainRange = 4.1 + P.chain * 0.35;
+      const chainDamage = damage * (0.3 + P.chain * 0.04);
+      let from = primary;
+      for (let jump = 0; jump < P.chain; jump++) {
+        let target = null, best = chainRange * chainRange;
+        for (const enemy of this.enemies) {
+          if (enemy.dead || used.has(enemy)) continue;
+          const distance = enemy.root.position.distanceToSquared(from.root.position);
+          if (distance < best) { best = distance; target = enemy; }
+        }
+        if (!target) break;
+        this.addChainEffect(from.root.position, target.root.position);
+        used.add(target);
+        this.hitEnemy(target, chainDamage);
+        from = target;
+      }
+    }
+  }
+
+  addBlastEffect(position, radius) {
+    if (this.combatEffects.length >= 28) return;
+    let mesh = this.effectPool.blast.pop();
+    if (!mesh) {
+      mesh = new THREE.Mesh(
+        new THREE.RingGeometry(0.72, 1, 40),
+        new THREE.MeshBasicMaterial({ color:0xff8a1f, transparent:true, opacity:0.72, depthWrite:false, side:THREE.DoubleSide })
+      );
+      mesh.rotation.x = -Math.PI / 2;
+    }
+    mesh.position.copy(position);
+    mesh.position.y = 0.06;
+    mesh.scale.setScalar(radius * 0.35);
+    mesh.material.opacity = 0.72;
+    this.scene.add(mesh);
+    this.combatEffects.push({ mesh, t:0, life:0.28, kind:'blast', radius });
+  }
+
+  addChainEffect(from, to) {
+    if (this.combatEffects.length >= 28) return;
+    let mesh = this.effectPool.chain.pop();
+    if (!mesh) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
+      mesh = new THREE.Line(
+        geometry,
+        new THREE.LineBasicMaterial({ color:0x67e8f9, transparent:true, opacity:0.95, depthWrite:false })
+      );
+    }
+    const positions = mesh.geometry.attributes.position.array;
+    positions[0] = from.x; positions[1] = 0.7; positions[2] = from.z;
+    positions[3] = (from.x + to.x) * 0.5 + (Math.random() - 0.5) * 0.35;
+    positions[4] = 0.82;
+    positions[5] = (from.z + to.z) * 0.5 + (Math.random() - 0.5) * 0.35;
+    positions[6] = to.x; positions[7] = 0.7; positions[8] = to.z;
+    mesh.geometry.attributes.position.needsUpdate = true;
+    mesh.geometry.computeBoundingSphere();
+    mesh.material.opacity = 0.95;
+    this.scene.add(mesh);
+    this.combatEffects.push({ mesh, t:0, life:0.16, kind:'chain' });
+  }
+
+  updateCombatEffects(dt) {
+    for (const effect of this.combatEffects) {
+      effect.t += dt;
+      const progress = Math.min(1, effect.t / effect.life);
+      effect.mesh.material.opacity = 1 - progress;
+      if (effect.kind === 'blast') effect.mesh.scale.setScalar(effect.radius * (0.35 + progress * 0.8));
+      if (progress < 1) continue;
+      this.scene.remove(effect.mesh);
+      this.effectPool[effect.kind].push(effect.mesh);
+      effect.dead = true;
+    }
+    this.combatEffects = this.combatEffects.filter(effect => !effect.dead);
   }
 
   showEnemyIntro(variantId, duration = 5, stageNumber = this.stageIndex + 1) {
@@ -583,14 +711,43 @@ export class SurvivorGame {
     const stage = STAGES[Math.min(this.stageIndex, STAGES.length - 1)];
     const cycle = Math.floor(this.stageIndex / STAGES.length);
     this.spawnClock = Math.max(0.68, stage.interval - cycle * 0.08);
-    const alive = this.enemies.filter(enemy => !enemy.dead).length;
-    const cap = Math.min(ENEMY_CAP, stage.cap + cycle * 4);
+    const alive = this.enemies.filter(enemy => !enemy.dead).length + this.pendingSpawns;
+    const cap = Math.min(ENEMY_CAP, stage.cap + cycle * 7);
     if (alive >= cap) return;
-    const variantId = stage.pool[Math.floor(Math.random() * stage.pool.length)];
-    this.spawnEnemy(variantId);
+    const pack = Math.min(5, stage.pack + cycle);
+    const count = Math.min(pack, cap - alive);
+    for (let i = 0; i < count; i++) {
+      const variantId = stage.pool[Math.floor(Math.random() * stage.pool.length)];
+      this.spawnEnemy(variantId);
+    }
+  }
+
+  rebuildEnemyGrid() {
+    for (const bucket of this.enemyGrid.values()) {
+      bucket.length = 0;
+      this.enemyGridPool.push(bucket);
+    }
+    this.enemyGrid.clear();
+    const cellSize = 1.6;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const p = enemy.root.position;
+      const gx = Math.floor(p.x / cellSize);
+      const gz = Math.floor(p.z / cellSize);
+      const key = (gx + 64) * 256 + gz + 64;
+      let bucket = this.enemyGrid.get(key);
+      if (!bucket) {
+        bucket = this.enemyGridPool.pop() || [];
+        this.enemyGrid.set(key, bucket);
+      }
+      bucket.push(enemy);
+      enemy.gridX = gx;
+      enemy.gridZ = gz;
+    }
   }
 
   updateEnemies(dt) {
+    this.rebuildEnemyGrid();
     const heroPos = this.hero.root.position;
     for (const enemy of this.enemies) {
       if (enemy.dead) {
@@ -606,31 +763,45 @@ export class SurvivorGame {
         enemy.spawn = Math.min(1, enemy.spawn + dt * 4);
         enemy.root.scale.setScalar(easeOutBack(enemy.spawn) * enemy.visualScale);
       }
+      enemy.slowT = Math.max(0, enemy.slowT - dt);
+      enemy.paralyzeT = Math.max(0, enemy.paralyzeT - dt);
+      const status = enemy.paralyzeT > 0 ? 2 : enemy.slowT > 0 ? 1 : 0;
+      if (status !== enemy.status) {
+        enemy.status = status;
+        enemy.ring.material.color.setHex(status === 2 ? 0xfde047 : status === 1 ? 0x38bdf8 : 0xf87171);
+      }
 
       const pos = enemy.root.position;
       let dx = heroPos.x - pos.x;
       let dz = heroPos.z - pos.z;
       let distance = Math.max(0.001, Math.hypot(dx, dz));
 
-      for (const other of this.enemies) {
-        if (other === enemy || other.dead) continue;
-        const ox = pos.x - other.root.position.x;
-        const oz = pos.z - other.root.position.z;
-        const od = Math.hypot(ox, oz);
-        const minimum = (enemy.radius + other.radius) * 0.72;
-        if (od > 0.001 && od < minimum) {
-          pos.x += ox / od * (minimum - od) * 0.18;
-          pos.z += oz / od * (minimum - od) * 0.18;
+      for (let gx = enemy.gridX - 1; gx <= enemy.gridX + 1; gx++) {
+        for (let gz = enemy.gridZ - 1; gz <= enemy.gridZ + 1; gz++) {
+          const bucket = this.enemyGrid.get((gx + 64) * 256 + gz + 64);
+          if (!bucket) continue;
+          for (const other of bucket) {
+            if (other === enemy || other.dead) continue;
+            const ox = pos.x - other.root.position.x;
+            const oz = pos.z - other.root.position.z;
+            const od = Math.hypot(ox, oz);
+            const minimum = (enemy.radius + other.radius) * 0.72;
+            if (od > 0.001 && od < minimum) {
+              pos.x += ox / od * (minimum - od) * 0.18;
+              pos.z += oz / od * (minimum - od) * 0.18;
+            }
+          }
         }
       }
 
       dx = heroPos.x - pos.x;
       dz = heroPos.z - pos.z;
       distance = Math.max(0.001, Math.hypot(dx, dz));
-      pos.x += dx / distance * enemy.speed * dt;
-      pos.z += dz / distance * enemy.speed * dt;
+      const moveScale = enemy.paralyzeT > 0 ? 0 : enemy.slowT > 0 ? enemy.slowFactor : 1;
+      pos.x += dx / distance * enemy.speed * moveScale * dt;
+      pos.z += dz / distance * enemy.speed * moveScale * dt;
       this.faceTo(enemy, heroPos.x, heroPos.z, dt);
-      enemy.anim.play('run');
+      enemy.anim.play(moveScale > 0 ? 'run' : 'idle');
 
       if (distance < this.hero.radius + enemy.radius + 0.12 && this.hero.invulnerable <= 0) {
         this.damageHero(enemy.dmg, dx / distance, dz / distance);
@@ -979,6 +1150,17 @@ export class SurvivorGame {
       this.scene.remove(pickup.mesh);
       pickup.mesh.geometry.dispose();
       pickup.mesh.material.dispose();
+    }
+    for (const effect of this.combatEffects || []) {
+      this.scene.remove(effect.mesh);
+      effect.mesh.geometry.dispose();
+      effect.mesh.material.dispose();
+    }
+    for (const pool of Object.values(this.effectPool || {})) {
+      for (const mesh of pool) {
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      }
     }
     this.disposeUnit(this.hero);
     for (const enemy of this.enemies || []) this.disposeUnit(enemy);

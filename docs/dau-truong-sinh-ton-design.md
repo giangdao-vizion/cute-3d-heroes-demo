@@ -118,6 +118,13 @@ Mỗi kỹ năng có tối đa 5 cấp. Người chơi mang tối đa 6 kỹ nă
 - Tăng bán kính hút ngọc.
 - Tăng chí mạng.
 
+### Hiệu ứng đòn đánh
+
+- **Sét lan:** mỗi cấp thêm một mục tiêu gần đó; sát thương giảm so với cú đánh chính.
+- **Nổ lan:** fireball gây sát thương vùng quanh mục tiêu; cấp cao tăng bán kính và sát thương.
+- **Băng giá:** làm chậm quái trúng đạn; mỗi cấp tăng hiệu lực và cơ hội đóng băng hoàn toàn trong thời gian ngắn.
+- Các hiệu ứng có thể kết hợp trong cùng một build nhưng sát thương phụ không kích hoạt hiệu ứng lần nữa.
+
 ### Tiến hóa kỹ năng
 
 Kỹ năng chủ động cấp 5 cộng với nội tại đúng cặp sẽ tiến hóa khi mở hòm boss:
@@ -144,6 +151,7 @@ Mỗi loại quái phải tạo một vấn đề khác nhau:
 
 Không sinh quái ngay trong vùng an toàn quanh người chơi hoặc trong vùng camera đang nhìn thấy quá gần.
 Mỗi loại hoặc biến thể mới được mở theo màn 50 giây, kèm thẻ giới thiệu 5 giây ở góc màn hình với tên, máu, giáp và tốc độ.
+Từ màn 3, mỗi nhịp sinh có thể đưa nhiều quái vào cùng lúc; kích thước đàn và giới hạn quái sống tiếp tục tăng theo màn nhưng không vượt trần mobile.
 
 Đòn đánh thường chỉ khóa hướng khi mục tiêu nằm trong tầm bắn. Đạn bay thẳng với độ cong nhỏ, không tiếp tục truy đuổi mục tiêu và biến mất khi đi hết tầm. Tầm bắn khởi đầu phải nằm trong vùng quan sát mobile và chỉ tăng qua thẻ nâng cấp; camera tăng FOV tương ứng để toàn bộ tầm bắn mới vẫn hữu ích.
 
