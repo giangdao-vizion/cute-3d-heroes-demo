@@ -70,17 +70,20 @@ Backlog: A1, A2, B1, B2, I1 (placeholder).
 
 ## Pha 2 — Vòng idle kiếm tiền (tap thu)
 
+**Trạng thái:** đang chờ duyệt M2 trên điện thoại.
+
 **Mục tiêu:** có cảm giác “siêu thị đang chạy” và tay phải tap thu tiền.
 
 Việc cần làm:
 
-1. Catalog buildables: kệ, quầy thu ngân, kho.
-2. Đặt sẵn layout mẫu: 1 cửa, 2 kệ, 1 quầy, 1 kho.
-3. Khách idle: vào → lấy hàng giả lập → xếp hàng → trả tiền.
-4. Money stack tại quầy; **bắt buộc tap mới vào ví**.
-5. HUD tiền + tốc độ x1/x2.
+1. [x] Catalog buildables: kệ, quầy thu ngân, kho.
+2. [x] Đặt sẵn layout mẫu: 1 cửa, 2 kệ, 1 quầy, 1 kho.
+3. [x] Khách idle: vào → lấy hàng → trả tiền → ra về (kèm FX di chuyển).
+4. [x] Money stack tại quầy; **bắt buộc tap mới vào ví**.
+5. [x] HUD tiền + tốc độ x1/x2.
+6. [x] Hiệu ứng kệ/hàng: pulse khi lấy, tồn kho số, restock khi hết.
 
-**Đầu ra:** chơi 30–60 giây chỉ để nhìn khách và tap thu tiền.  
+**Đầu ra:** https://giangdao-vizion.github.io/cute-3d-heroes-demo/supermarket.html?v=m2  
 **Tiêu chí xong:** không cần hướng dẫn dài vẫn hiểu phải tap vào đống tiền.
 
 Backlog: C1, E1, E2, F1, G1 (phần tiền/tốc độ).

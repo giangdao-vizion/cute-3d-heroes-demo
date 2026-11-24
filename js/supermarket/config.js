@@ -19,14 +19,12 @@ export const BRAND = {
 export const GRID = {
   width: 8,
   height: 8,
-  // Vùng usable ban đầu nằm giữa; vành ngoài locked.
   startOpen: [
     [2, 2], [3, 2], [4, 2], [5, 2],
     [2, 3], [3, 3], [4, 3], [5, 3],
     [2, 4], [3, 4], [4, 4], [5, 4],
     [2, 5], [3, 5], [4, 5], [5, 5],
   ],
-  // Nhìn thẳng từ trên xuống: ô vuông, vật thể là mặt trên (không skew isometric).
   tile: 58,
   view: 'topdown',
 };
@@ -43,18 +41,18 @@ export const ECONOMY = {
 };
 
 export const SKUS = [
-  { id: 'water', name: 'Nước suối', category: 'Drinks', cost: 2, price: 5, shelfCap: 12, popularity: 1.0 },
-  { id: 'cola', name: 'Cola', category: 'Drinks', cost: 3, price: 7, shelfCap: 10, popularity: 0.9 },
-  { id: 'juice', name: 'Nước cam', category: 'Drinks', cost: 3, price: 8, shelfCap: 8, popularity: 0.7 },
-  { id: 'chips', name: 'Snack', category: 'Snacks', cost: 2, price: 6, shelfCap: 14, popularity: 0.95 },
-  { id: 'cookie', name: 'Bánh quy', category: 'Snacks', cost: 3, price: 7, shelfCap: 10, popularity: 0.8 },
-  { id: 'candy', name: 'Kẹo', category: 'Snacks', cost: 1, price: 4, shelfCap: 16, popularity: 0.75 },
-  { id: 'apple', name: 'Táo', category: 'Fresh', cost: 2, price: 5, shelfCap: 10, popularity: 0.7 },
-  { id: 'milk', name: 'Sữa', category: 'Fresh', cost: 4, price: 9, shelfCap: 8, popularity: 0.85 },
+  { id: 'water', name: 'Nước suối', category: 'Drinks', cost: 2, price: 5, shelfCap: 12, popularity: 1.0, color: '#4f9dff' },
+  { id: 'cola', name: 'Cola', category: 'Drinks', cost: 3, price: 7, shelfCap: 10, popularity: 0.9, color: '#e4574c' },
+  { id: 'juice', name: 'Nước cam', category: 'Drinks', cost: 3, price: 8, shelfCap: 8, popularity: 0.7, color: '#f59e0b' },
+  { id: 'chips', name: 'Snack', category: 'Snacks', cost: 2, price: 6, shelfCap: 14, popularity: 0.95, color: '#e6b422' },
+  { id: 'cookie', name: 'Bánh quy', category: 'Snacks', cost: 3, price: 7, shelfCap: 10, popularity: 0.8, color: '#a8794f' },
+  { id: 'candy', name: 'Kẹo', category: 'Snacks', cost: 1, price: 4, shelfCap: 16, popularity: 0.75, color: '#ec4899' },
+  { id: 'apple', name: 'Táo', category: 'Fresh', cost: 2, price: 5, shelfCap: 10, popularity: 0.7, color: '#22c55e' },
+  { id: 'milk', name: 'Sữa', category: 'Fresh', cost: 4, price: 9, shelfCap: 8, popularity: 0.85, color: '#f8fafc' },
 ];
 
 export const PHASE = {
-  id: 'M1c',
-  title: 'Pha 1 — Map nhìn từ trên xuống',
-  reviewNote: 'Bản M1c: ô VUÔNG nhìn từ trên, không còn skew isometric. Chạm ô · kéo map.',
+  id: 'M2',
+  title: 'Pha 2 — Nhân vật & hiệu ứng',
+  reviewNote: 'Khách đi mua hàng · chạm đống tiền vàng để thu',
 };

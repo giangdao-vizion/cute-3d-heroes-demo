@@ -1,13 +1,18 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m1c';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState } from './grid.js?v=m1c';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2';
+import { createActorsState, updateActors, drawCustomer } from './actors.js?v=m2';
+import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
 const ctx = canvas.getContext('2d');
 const cells = createGrid();
+const actors = createActorsState(cells);
+const fx = createFx();
 
 const state = {
   money: ECONOMY.startMoney,
+  pendingMoney: 0,
   selected: null,
   originX: 0,
   originY: 0,
@@ -16,7 +21,11 @@ const state = {
   lastX: 0,
   lastY: 0,
   playing: false,
+  speed: 1,
+  time: 0,
 };
+
+let lastTs = 0;
 
 function applyBrandCss() {
   const root = document.documentElement;
@@ -35,7 +44,6 @@ function resize() {
   canvas.height = Math.floor(h * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (!state.originX && !state.originY) centerMap();
-  draw();
 }
 
 function centerMap() {
@@ -66,7 +74,6 @@ function drawFloorTile(cell) {
   const w = t - gap * 2;
   const h = t - gap * 2;
 
-  // Lối đi vs ô khóa: nhìn thẳng từ trên, ô VUÔNG rõ.
   let fill = ((cell.x + cell.y) % 2 === 0) ? '#f4f8e8' : '#eaf3d5';
   let stroke = '#c5d8a8';
   if (cell.state === 'locked') {
@@ -94,16 +101,24 @@ function drawFloorTile(cell) {
   }
 }
 
-function drawTopDownShelf(x, y, w, h) {
-  // Nhìn từ trên: mặt trên kệ + các ngăn hàng.
+function drawTopDownShelf(cell, x, y, w, h) {
+  const pulse = cell.pulse > 0 ? 1 + Math.sin(state.time * 20) * 0.04 : 1;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(pulse, pulse);
+  ctx.translate(-cx, -cy);
+
   ctx.fillStyle = 'rgba(31,58,70,.12)';
   roundRect(x + 2, y + 3, w, h, 6);
   ctx.fill();
 
-  ctx.fillStyle = '#4f93b0';
+  const empty = (cell.stock ?? 0) <= 0;
+  ctx.fillStyle = empty ? '#8aa4b0' : '#4f93b0';
   roundRect(x, y, w, h, 6);
   ctx.fill();
-  ctx.strokeStyle = '#2f647a';
+  ctx.strokeStyle = empty ? '#6c838e' : '#2f647a';
   ctx.lineWidth = 1.6;
   ctx.stroke();
 
@@ -112,19 +127,42 @@ function drawTopDownShelf(x, y, w, h) {
   const pad = 5;
   const gw = (w - pad * (cols + 1)) / cols;
   const gh = (h - pad * (rows + 1)) / rows;
+  const filledSlots = Math.ceil(((cell.stock ?? 0) / Math.max(1, cell.stockCap || 12)) * 4);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
       const gx = x + pad + c * (gw + pad);
       const gy = y + pad + r * (gh + pad);
       ctx.fillStyle = '#eef8ff';
       roundRect(gx, gy, gw, gh, 3);
       ctx.fill();
-      // Chấm hàng hóa.
-      ctx.fillStyle = ['#ff7a59', '#7c3aed', '#22c55e', '#f59e0b'][(r * 2 + c) % 4];
-      ctx.beginPath();
-      ctx.arc(gx + gw / 2, gy + gh / 2, Math.min(gw, gh) * 0.22, 0, Math.PI * 2);
-      ctx.fill();
+      if (idx < filledSlots) {
+        const sku = SKUS[(cell.x + cell.y + idx) % SKUS.length];
+        const bob = Math.sin(state.time * 4 + idx) * 1.2;
+        ctx.fillStyle = sku.color;
+        ctx.beginPath();
+        ctx.arc(gx + gw / 2, gy + gh / 2 + bob, Math.min(gw, gh) * 0.24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(31,58,70,.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
     }
+  }
+
+  // Nhãn tồn kho.
+  ctx.fillStyle = empty ? BRAND.colors.danger : 'rgba(31,58,70,.75)';
+  ctx.font = '800 10px "Baloo 2", system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(empty ? 'Hết' : `${cell.stock}/${cell.stockCap}`, x + w / 2, y + h - 2);
+  ctx.restore();
+
+  if (empty) {
+    ctx.fillStyle = BRAND.colors.danger;
+    ctx.font = '800 12px "Baloo 2", system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('!', x + w - 4, y + 10);
   }
 }
 
@@ -138,7 +176,6 @@ function drawTopDownCheckout(x, y, w, h) {
   ctx.strokeStyle = '#a67c00';
   ctx.lineWidth = 1.6;
   ctx.stroke();
-  // Băng chuyền nhìn từ trên.
   ctx.fillStyle = '#fff7d1';
   roundRect(x + 6, y + h * 0.28, w - 12, h * 0.22, 4);
   ctx.fill();
@@ -162,8 +199,6 @@ function drawTopDownStock(x, y, w, h) {
   ctx.fillStyle = '#f0e2c8';
   roundRect(x + w * 0.22, y + h * 0.22, w * 0.56, h * 0.56, 4);
   ctx.fill();
-  ctx.strokeStyle = '#c4a57a';
-  ctx.stroke();
 }
 
 function drawBuilding(cell) {
@@ -174,9 +209,43 @@ function drawBuilding(cell) {
   const y = p.y + 8;
   const w = t - 16;
   const h = t - 16;
-  if (cell.building === 'shelf') drawTopDownShelf(x, y, w, h);
+  if (cell.building === 'shelf') drawTopDownShelf(cell, x, y, w, h);
   else if (cell.building === 'checkout') drawTopDownCheckout(x, y, w, h);
   else if (cell.building === 'stockroom') drawTopDownStock(x, y, w, h);
+}
+
+function drawMoneyStack() {
+  if (state.pendingMoney <= 0 || !actors.checkout) return;
+  const c = cellCenter(actors.checkout, state.originX, state.originY);
+  const bounce = Math.sin(state.time * 6) * 2;
+  const x = c.x + 16;
+  const y = c.y - 18 + bounce;
+  const layers = Math.min(5, 1 + Math.floor(state.pendingMoney / 12));
+  for (let i = 0; i < layers; i++) {
+    ctx.fillStyle = i % 2 ? '#f5d76e' : '#e6b422';
+    roundRect(x - 12, y - i * 4, 24, 10, 3);
+    ctx.fill();
+    ctx.strokeStyle = '#a67c00';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = 'rgba(31,58,70,.35)';
+  ctx.lineWidth = 3;
+  ctx.font = '800 13px "Baloo 2", system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.strokeText(`$${state.pendingMoney}`, x, y - layers * 4 - 2);
+  ctx.fillText(`$${state.pendingMoney}`, x, y - layers * 4 - 2);
+
+  // Hint tap.
+  ctx.fillStyle = 'rgba(31,58,70,.8)';
+  roundRect(x - 28, y + 14, 56, 16, 8);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '800 10px "Baloo 2", system-ui';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('CHẠM THU', x, y + 22);
 }
 
 function drawRoomFrame() {
@@ -192,24 +261,12 @@ function drawRoomFrame() {
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // Cửa vào phía dưới — dấu hiệu nhìn từ trên.
   const doorW = t * 1.4;
   const doorX = state.originX + (GRID.width * t - doorW) / 2;
   const doorY = state.originY + GRID.height * t - 2;
   ctx.fillStyle = '#9fd0e8';
   roundRect(doorX, doorY, doorW, 12, 4);
   ctx.fill();
-}
-
-function drawViewBadge() {
-  ctx.fillStyle = 'rgba(31,58,70,.82)';
-  roundRect(12, 96, 168, 28, 14);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = '800 13px "Baloo 2", system-ui';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('NHÌN TỪ TRÊN XUỐNG', 24, 110);
 }
 
 function draw() {
@@ -225,20 +282,64 @@ function draw() {
   drawRoomFrame();
   forEachCell(cells, drawFloorTile);
   forEachCell(cells, drawBuilding);
-  drawViewBadge();
+  for (const c of actors.customers) drawCustomer(ctx, c, state.originX, state.originY);
+  drawMoneyStack();
+  drawFx(ctx, fx);
 }
 
 function syncHud() {
   $('money').textContent = `$${state.money}`;
-  const counts = countByState(cells);
-  $('stats').textContent = `Mở ${counts.empty + counts.occupied}/${GRID.width * GRID.height} ô · CT ${counts.occupied}`;
-  if (state.selected) {
-    const c = state.selected;
-    const label = c.building || c.state;
-    $('hint').textContent = `Ô (${c.x},${c.y}): ${label}`;
-  } else {
-    $('hint').textContent = PHASE.reviewNote;
-  }
+  $('stats').textContent = `Khách ${actors.customers.length} · Chờ $${state.pendingMoney}`;
+  if (state.pendingMoney > 0) $('hint').textContent = 'Chạm đống tiền vàng ở quầy PAY để thu';
+  else $('hint').textContent = PHASE.reviewNote;
+}
+
+function worldFromCustomer(c) {
+  return {
+    x: state.originX + c.x * GRID.tile + GRID.tile / 2,
+    y: state.originY + c.y * GRID.tile + GRID.tile / 2,
+  };
+}
+
+function onArriveShelf(c) {
+  const p = worldFromCustomer(c);
+  addRing(fx, p.x, p.y, 'rgba(79,157,255,.35)');
+}
+
+function onTakeItem(c, shelf) {
+  shelf.pulse = 0.35;
+  const p = cellCenter(shelf, state.originX, state.originY);
+  const color = c.sku?.color || '#22c55e';
+  addSpark(fx, p.x, p.y, color);
+  addFloat(fx, p.x, p.y - 8, `+${c.sku?.name || 'Item'}`, color);
+}
+
+function onPay(c) {
+  const gain = Math.max(4, (c.basket || 1) * (c.sku?.price || 5));
+  state.pendingMoney += gain;
+  const p = cellCenter(actors.checkout, state.originX, state.originY);
+  addSpark(fx, p.x, p.y, BRAND.colors.money);
+  addFloat(fx, p.x, p.y - 12, `+$${gain}`, '#b45309');
+  syncHud();
+}
+
+function collectMoney(clientX, clientY) {
+  if (state.pendingMoney <= 0 || !actors.checkout) return false;
+  const c = cellCenter(actors.checkout, state.originX, state.originY);
+  const x = c.x + 16;
+  const y = c.y - 18;
+  const rect = canvas.getBoundingClientRect();
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+  if (Math.hypot(px - x, py - y) > 42) return false;
+  const got = state.pendingMoney;
+  state.money += got;
+  state.pendingMoney = 0;
+  addFloat(fx, x, y - 10, `+$${got}`, BRAND.colors.accent);
+  addSpark(fx, x, y, BRAND.colors.money);
+  addRing(fx, x, y, 'rgba(230,180,34,.4)');
+  syncHud();
+  return true;
 }
 
 function pickCell(clientX, clientY) {
@@ -267,17 +368,47 @@ function onPointerMove(e) {
   state.originY += dy;
   state.lastX = e.clientX;
   state.lastY = e.clientY;
-  draw();
 }
 
 function onPointerUp(e) {
   if (!state.playing) return;
   if (state.dragging && !state.moved) {
-    state.selected = pickCell(e.clientX, e.clientY);
-    syncHud();
-    draw();
+    if (!collectMoney(e.clientX, e.clientY)) {
+      state.selected = pickCell(e.clientX, e.clientY);
+      // Tap kệ hết hàng → restock nhanh cho demo M2.
+      if (state.selected?.building === 'shelf' && state.selected.stock <= 0) {
+        state.selected.stock = state.selected.stockCap;
+        const p = cellCenter(state.selected, state.originX, state.originY);
+        addSpark(fx, p.x, p.y, '#22c55e');
+        addFloat(fx, p.x, p.y - 8, 'Restock!', '#1f8f6c');
+      }
+      syncHud();
+    }
   }
   state.dragging = false;
+}
+
+function update(dt) {
+  state.time += dt;
+  forEachCell(cells, cell => {
+    if (cell.pulse > 0) cell.pulse = Math.max(0, cell.pulse - dt);
+  });
+  updateActors(actors, cells, dt, {
+    onArriveShelf,
+    onTakeItem,
+    onPay,
+  });
+  updateFx(fx, dt);
+  syncHud();
+}
+
+function frame(ts) {
+  if (!lastTs) lastTs = ts;
+  const dt = Math.min(0.05, (ts - lastTs) / 1000) * state.speed;
+  lastTs = ts;
+  if (state.playing) update(dt);
+  draw();
+  requestAnimationFrame(frame);
 }
 
 function openStore() {
@@ -286,7 +417,6 @@ function openStore() {
   $('hud').classList.remove('hidden');
   centerMap();
   syncHud();
-  draw();
 }
 
 function boot() {
@@ -296,6 +426,12 @@ function boot() {
   $('phaseTag').textContent = PHASE.id;
   $('skuPreview').innerHTML = SKUS.slice(0, 4).map(s => `<span>${s.name}</span>`).join('');
   $('openBtn').onclick = openStore;
+  if ($('speedBtn')) {
+    $('speedBtn').onclick = () => {
+      state.speed = state.speed === 1 ? 2 : 1;
+      $('speedBtn').textContent = `x${state.speed}`;
+    };
+  }
   addEventListener('resize', resize);
   canvas.addEventListener('pointerdown', onPointerDown);
   addEventListener('pointermove', onPointerMove);
@@ -306,6 +442,7 @@ function boot() {
   }
   document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
   resize();
+  requestAnimationFrame(frame);
 }
 
 boot();
