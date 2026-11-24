@@ -154,11 +154,11 @@ Căn cứ nằm giữa bản đồ và bị tấn công từ bốn đường. Ng
 
 Trang dự kiến: `four-fronts.html`.
 
-## 6. Siêu Thị Chibi (ý tưởng quản lý)
+## 6. Mini Mart Tycoon (ý tưởng quản lý)
 
-Game quản lý siêu thị: khách đi lại giữa các quầy, người chơi mở rộng mặt bằng và chống tắc nghẽn. Không phải game sinh tồn; ghi ở đây để theo dõi chung backlog sảnh game.
+Game quản lý siêu thị brand riêng: idle-tap, góc isometric, prototype tập trung cảm giác xây lớn, tồn kho chi tiết theo SKU. Không phải game sinh tồn; ghi ở đây để theo dõi chung backlog sảnh game.
 
-Đặc tả quyết định và tài nguyên: [`sieu-thi-quan-ly-design.md`](./sieu-thi-quan-ly-design.md).
+Hướng đã chốt: [`sieu-thi-quan-ly-design.md`](./sieu-thi-quan-ly-design.md).
 
 ## 7. Ý tưởng mở rộng ngắn
 
