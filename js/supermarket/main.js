@@ -225,3 +225,4 @@ function boot() {
 }
 
 boot();
+if (location.search.includes('play=1')) openStore();
