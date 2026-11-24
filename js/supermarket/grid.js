@@ -1,4 +1,4 @@
-import { GRID } from './config.js?v=m2b';
+import { GRID } from './config.js?v=m2c';
 
 export function createGrid() {
   const cells = [];

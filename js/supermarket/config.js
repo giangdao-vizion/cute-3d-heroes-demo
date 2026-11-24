@@ -52,7 +52,7 @@ export const SKUS = [
 ];
 
 export const PHASE = {
-  id: 'M2',
+  id: 'M2c',
   title: 'Pha 2 — Nhân vật & hiệu ứng',
-  reviewNote: 'Khách đi mua hàng · chạm đống tiền vàng để thu',
+  reviewNote: 'Chữ trạng thái nằm trong khung riêng · chạm tiền để thu',
 };

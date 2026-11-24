@@ -1,7 +1,7 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2b';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2b';
-import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2b';
-import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2b';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2c';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2c';
+import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2c';
+import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2c';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
@@ -93,16 +93,34 @@ function drawFloorTile(cell) {
   ctx.stroke();
 
   if (cell.state === 'locked') {
-    ctx.fillStyle = 'rgba(31,58,70,.28)';
-    ctx.font = '700 13px "Baloo 2", system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🔒', x + w / 2, y + h / 2);
+    const chipH = Math.max(12, Math.floor(h * 0.28));
+    drawStatusChip(x + 6, y + (h - chipH) / 2, w - 12, chipH, 'Khóa', {
+      bg: 'rgba(255,253,247,.92)',
+      fg: '#5b6f78',
+      stroke: 'rgba(31,58,70,.16)',
+    });
   }
 }
 
+function drawStatusChip(x, y, w, h, text, opts = {}) {
+  const bg = opts.bg || '#fffdf7';
+  const fg = opts.fg || BRAND.colors.ink;
+  const stroke = opts.stroke || 'rgba(31,58,70,.18)';
+  roundRect(x, y, w, h, Math.min(8, h / 2));
+  ctx.fillStyle = bg;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.fillStyle = fg;
+  ctx.font = `800 ${Math.max(9, Math.floor(h * 0.62))}px "Baloo 2", system-ui`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
+}
+
 function drawTopDownShelf(cell, x, y, w, h) {
-  const pulse = cell.pulse > 0 ? 1 + Math.sin(state.time * 20) * 0.04 : 1;
+  const pulse = cell.pulse > 0 ? 1 + Math.sin(state.time * 20) * 0.03 : 1;
   const cx = x + w / 2;
   const cy = y + h / 2;
   ctx.save();
@@ -110,11 +128,15 @@ function drawTopDownShelf(cell, x, y, w, h) {
   ctx.scale(pulse, pulse);
   ctx.translate(-cx, -cy);
 
+  const empty = (cell.stock ?? 0) <= 0;
+  const chipH = Math.max(12, Math.floor(h * 0.28));
+  const gap = 3;
+  const bodyH = h - chipH - gap;
+
+  // Khung công trình.
   ctx.fillStyle = 'rgba(31,58,70,.12)';
   roundRect(x + 2, y + 3, w, h, 6);
   ctx.fill();
-
-  const empty = (cell.stock ?? 0) <= 0;
   ctx.fillStyle = empty ? '#8aa4b0' : '#4f93b0';
   roundRect(x, y, w, h, 6);
   ctx.fill();
@@ -122,26 +144,31 @@ function drawTopDownShelf(cell, x, y, w, h) {
   ctx.lineWidth = 1.6;
   ctx.stroke();
 
+  // Vùng hàng hóa (phía trên) — không chồng chữ.
   const cols = 2;
   const rows = 2;
-  const pad = 5;
-  const gw = (w - pad * (cols + 1)) / cols;
-  const gh = (h - pad * (rows + 1)) / rows;
+  const pad = 4;
+  const areaX = x + pad;
+  const areaY = y + pad;
+  const areaW = w - pad * 2;
+  const areaH = bodyH - pad;
+  const gw = (areaW - pad * (cols - 1)) / cols;
+  const gh = (areaH - pad * (rows - 1)) / rows;
   const filledSlots = Math.ceil(((cell.stock ?? 0) / Math.max(1, cell.stockCap || 12)) * 4);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const idx = r * cols + c;
-      const gx = x + pad + c * (gw + pad);
-      const gy = y + pad + r * (gh + pad);
+      const gx = areaX + c * (gw + pad);
+      const gy = areaY + r * (gh + pad);
       ctx.fillStyle = '#eef8ff';
       roundRect(gx, gy, gw, gh, 3);
       ctx.fill();
       if (idx < filledSlots) {
         const sku = SKUS[(cell.x + cell.y + idx) % SKUS.length];
-        const bob = Math.sin(state.time * 4 + idx) * 1.2;
+        const bob = Math.sin(state.time * 4 + idx) * 0.8;
         ctx.fillStyle = sku.color;
         ctx.beginPath();
-        ctx.arc(gx + gw / 2, gy + gh / 2 + bob, Math.min(gw, gh) * 0.24, 0, Math.PI * 2);
+        ctx.arc(gx + gw / 2, gy + gh / 2 + bob, Math.min(gw, gh) * 0.22, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = 'rgba(31,58,70,.2)';
         ctx.lineWidth = 1;
@@ -150,23 +177,25 @@ function drawTopDownShelf(cell, x, y, w, h) {
     }
   }
 
-  // Nhãn tồn kho.
-  ctx.fillStyle = empty ? BRAND.colors.danger : 'rgba(31,58,70,.75)';
-  ctx.font = '800 10px "Baloo 2", system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(empty ? 'Hết' : `${cell.stock}/${cell.stockCap}`, x + w / 2, y + h - 2);
+  // Khung trạng thái riêng phía dưới trong ô.
+  drawStatusChip(
+    x + 4,
+    y + h - chipH - 3,
+    w - 8,
+    chipH,
+    empty ? 'Hết hàng' : `${cell.stock}/${cell.stockCap}`,
+    empty
+      ? { bg: '#fee2e2', fg: BRAND.colors.danger, stroke: '#fca5a5' }
+      : { bg: '#fffdf7', fg: BRAND.colors.ink, stroke: 'rgba(31,58,70,.16)' },
+  );
   ctx.restore();
-
-  if (empty) {
-    ctx.fillStyle = BRAND.colors.danger;
-    ctx.font = '800 12px "Baloo 2", system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('!', x + w - 4, y + 10);
-  }
 }
 
 function drawTopDownCheckout(x, y, w, h) {
+  const chipH = Math.max(12, Math.floor(h * 0.28));
+  const gap = 3;
+  const bodyH = h - chipH - gap;
+
   ctx.fillStyle = 'rgba(31,58,70,.12)';
   roundRect(x + 2, y + 3, w, h, 6);
   ctx.fill();
@@ -176,17 +205,36 @@ function drawTopDownCheckout(x, y, w, h) {
   ctx.strokeStyle = '#a67c00';
   ctx.lineWidth = 1.6;
   ctx.stroke();
+
+  // Vùng băng chuyền riêng.
   ctx.fillStyle = '#fff7d1';
-  roundRect(x + 6, y + h * 0.28, w - 12, h * 0.22, 4);
+  roundRect(x + 5, y + 5, w - 10, bodyH - 6, 4);
   ctx.fill();
-  ctx.fillStyle = BRAND.colors.ink;
-  ctx.font = '800 11px "Baloo 2", system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('PAY', x + w / 2, y + h * 0.68);
+  ctx.strokeStyle = 'rgba(166,124,0,.25)';
+  ctx.stroke();
+  // Vạch băng chuyền.
+  ctx.strokeStyle = 'rgba(166,124,0,.35)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 2; i++) {
+    const yy = y + 5 + (bodyH - 6) * (i / 3);
+    ctx.beginPath();
+    ctx.moveTo(x + 8, yy);
+    ctx.lineTo(x + w - 8, yy);
+    ctx.stroke();
+  }
+
+  drawStatusChip(x + 4, y + h - chipH - 3, w - 8, chipH, 'PAY', {
+    bg: '#fff8e1',
+    fg: BRAND.colors.ink,
+    stroke: '#e0b84a',
+  });
 }
 
 function drawTopDownStock(x, y, w, h) {
+  const chipH = Math.max(12, Math.floor(h * 0.28));
+  const gap = 3;
+  const bodyH = h - chipH - gap;
+
   ctx.fillStyle = 'rgba(31,58,70,.12)';
   roundRect(x + 2, y + 3, w, h, 6);
   ctx.fill();
@@ -196,9 +244,18 @@ function drawTopDownStock(x, y, w, h) {
   ctx.strokeStyle = '#5c3f27';
   ctx.lineWidth = 1.6;
   ctx.stroke();
+
   ctx.fillStyle = '#f0e2c8';
-  roundRect(x + w * 0.22, y + h * 0.22, w * 0.56, h * 0.56, 4);
+  roundRect(x + w * 0.18, y + 5, w * 0.64, bodyH - 6, 4);
   ctx.fill();
+  ctx.strokeStyle = '#c4a57a';
+  ctx.stroke();
+
+  drawStatusChip(x + 4, y + h - chipH - 3, w - 8, chipH, 'Kho', {
+    bg: '#f7efe4',
+    fg: '#5c3f27',
+    stroke: '#d2b48c',
+  });
 }
 
 function drawBuilding(cell) {

@@ -1,4 +1,4 @@
-import { GRID, SKUS } from './config.js?v=m2b';
+import { GRID, SKUS } from './config.js?v=m2c';
 
 const PALETTES = [
   { body: '#5ea3c2', shirt: '#ff7a59', hair: '#2b2340' },
