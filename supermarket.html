@@ -43,19 +43,34 @@
   #openBtn:active { transform:translateY(3px); box-shadow:0 3px 0 #146b50; }
   .note { margin:10px 0 0; color:#667f88; font-size:12px; font-weight:700; text-align:center; }
   #hud { position:fixed; inset:0; z-index:4; pointer-events:none; padding:calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
-  .top {
-    display:flex; justify-content:space-between; gap:8px; align-items:flex-start;
-  }
+  .top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
   .pill {
     padding:8px 12px; border-radius:16px; background:rgba(255,253,247,.94); border:2px solid rgba(255,255,255,.9);
     box-shadow:0 8px 18px rgba(31,58,70,.12); font-weight:800;
   }
   #money { color:#9a6d00; font-size:20px; }
-  #stats { font-size:13px; max-width:58vw; }
-  #hint {
-    position:absolute; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom));
-    padding:10px 14px; border-radius:16px; background:rgba(31,58,70,.86); color:#fff; font-size:13px; font-weight:700; text-align:center;
+  #stats { font-size:13px; max-width:46vw; }
+  #dock {
+    position:absolute; left:10px; right:10px; bottom:calc(58px + env(safe-area-inset-bottom));
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; pointer-events:auto;
   }
+  #dock button {
+    min-height:52px; border:0; border-radius:16px; background:rgba(255,253,247,.96); color:var(--ms-ink);
+    font:800 12px/1.15 'Baloo 2', system-ui; box-shadow:0 6px 0 rgba(31,58,70,.12); cursor:pointer; padding:6px 4px;
+  }
+  #dock button small { display:block; margin-top:2px; color:#6d8189; font-size:10px; }
+  #dock button.on { background:var(--ms-accent); color:#fff; box-shadow:0 6px 0 #146b50; }
+  #dock button.on small { color:rgba(255,255,255,.85); }
+  #hint {
+    position:absolute; left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom));
+    padding:8px 12px; border-radius:16px; background:rgba(31,58,70,.86); color:#fff; font-size:12px; font-weight:700; text-align:center;
+  }
+  #toast {
+    position:absolute; left:50%; top:28%; transform:translate(-50%,-50%); pointer-events:none;
+    padding:10px 16px; border-radius:16px; background:#1f8f6c; color:#fff; font:800 18px 'Baloo 2', system-ui;
+    opacity:0; transition:opacity .2s, transform .2s;
+  }
+  #toast.show { opacity:1; transform:translate(-50%,-60%); }
 </style>
 </head>
 <body>
@@ -64,12 +79,12 @@
 
   <div id="splash">
     <div class="splash-card">
-      <span class="phase" id="phaseTag">M2</span>
+      <span class="phase" id="phaseTag">M3</span>
       <h1 id="brandName">My Supermarket</h1>
       <p class="slogan" id="brandSlogan">Build your aisle empire.</p>
       <div class="sku-preview" id="skuPreview"></div>
       <button id="openBtn">Mở cửa</button>
-      <p class="note">Bản M2d: mỗi ô tách panel đồ / panel chữ riêng</p>
+      <p class="note">Bản M3: mở ô · xây kệ/quầy · siêu thị lớn dần</p>
     </div>
   </div>
 
@@ -79,10 +94,17 @@
       <div class="pill" id="stats">...</div>
       <button class="pill" id="speedBtn" style="pointer-events:auto;border:0;cursor:pointer">x1</button>
     </div>
-    <div id="hint">Khách đi mua hàng · chạm đống tiền vàng để thu</div>
+    <div id="dock">
+      <button id="btnUnlock" type="button">Mở ô<small id="unlockPrice">$35</small></button>
+      <button id="btnShelf" type="button">Kệ<small>$50</small></button>
+      <button id="btnCheckout" type="button">Quầy<small>$75</small></button>
+      <button id="btnCancel" type="button">Xong<small>thoát</small></button>
+    </div>
+    <div id="hint">Chọn Mở ô / Kệ / Quầy rồi chạm map</div>
+    <div id="toast"></div>
   </div>
 </div>
 
-<script type="module" src="js/supermarket/main.js?v=m2e"></script>
+<script type="module" src="js/supermarket/main.js?v=m3"></script>
 </body>
 </html>

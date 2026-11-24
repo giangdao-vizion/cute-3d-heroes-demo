@@ -1,7 +1,11 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2e';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2e';
-import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2e';
-import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2e';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m3';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m3';
+import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m3';
+import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m3';
+import {
+  canUnlock, canBuild, unlockCell, placeBuilding, unlockPrice, storeLevel,
+  refreshActorsBuildings, countOpened,
+} from './build.js?v=m3';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
@@ -23,6 +27,9 @@ const state = {
   playing: false,
   speed: 1,
   time: 0,
+  mode: null, // null | unlock | shelf | checkout
+  level: 1,
+  toastT: 0,
 };
 
 let lastTs = 0;
@@ -79,6 +86,12 @@ function drawFloorTile(cell) {
   if (cell.state === 'locked') {
     fill = ((cell.x + cell.y) % 2 === 0) ? '#d5e0e5' : '#c9d7dd';
     stroke = '#a7b8bf';
+  }
+  const buildOk = (state.mode === 'unlock' && canUnlock(cells, cell))
+    || ((state.mode === 'shelf' || state.mode === 'checkout') && canBuild(cell));
+  if (buildOk) {
+    fill = state.mode === 'unlock' ? '#d9f7e8' : '#e7f0ff';
+    stroke = state.mode === 'unlock' ? '#1f8f6c' : '#4f9dff';
   }
   if (selected) {
     fill = '#ffe9a8';
@@ -331,11 +344,76 @@ function draw() {
   drawFx(ctx, fx);
 }
 
+function showToast(text) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  state.toastT = 1.4;
+}
+
+function setMode(mode) {
+  state.mode = state.mode === mode ? null : mode;
+  syncDock();
+  syncHud();
+}
+
+function syncDock() {
+  const price = unlockPrice(cells);
+  if ($('unlockPrice')) $('unlockPrice').textContent = `$${price}`;
+  $('btnUnlock')?.classList.toggle('on', state.mode === 'unlock');
+  $('btnShelf')?.classList.toggle('on', state.mode === 'shelf');
+  $('btnCheckout')?.classList.toggle('on', state.mode === 'checkout');
+}
+
 function syncHud() {
+  const opened = countOpened(cells);
+  const level = storeLevel(cells);
+  if (level > state.level) {
+    state.level = level;
+    showToast(`Store Level ${level}!`);
+  } else {
+    state.level = level;
+  }
   $('money').textContent = `$${state.money}`;
-  $('stats').textContent = `Khách ${actors.customers.length} · Chờ $${state.pendingMoney}`;
-  if (state.pendingMoney > 0) $('hint').textContent = 'Chạm đống tiền vàng ở quầy PAY để thu';
+  $('stats').textContent = `Lv${level} · ${opened}/64 ô · Chờ $${state.pendingMoney}`;
+  if (state.mode === 'unlock') $('hint').textContent = `Chạm ô Khóa kề vùng mở · giá $${unlockPrice(cells)}`;
+  else if (state.mode === 'shelf') $('hint').textContent = `Chạm ô trống để xây Kệ · $${ECONOMY.buildShelf}`;
+  else if (state.mode === 'checkout') $('hint').textContent = `Chạm ô trống để xây Quầy · $${ECONOMY.buildCheckout}`;
+  else if (state.pendingMoney > 0) $('hint').textContent = 'Chạm đống tiền vàng ở quầy PAY để thu';
   else $('hint').textContent = PHASE.reviewNote;
+}
+
+function tryBuildOn(cell) {
+  if (!cell || !state.mode) return false;
+  if (state.mode === 'unlock') {
+    const price = unlockPrice(cells);
+    if (state.money < price) { showToast('Không đủ tiền'); return true; }
+    const res = unlockCell(cells, cell);
+    if (!res.ok) { showToast(res.reason); return true; }
+    state.money -= res.price;
+    const p = cellCenter(cell, state.originX, state.originY);
+    addSpark(fx, p.x, p.y, '#1f8f6c');
+    addFloat(fx, p.x, p.y - 8, 'Mở ô!', '#1f8f6c');
+    addRing(fx, p.x, p.y, 'rgba(31,143,108,.35)');
+    syncDock();
+    syncHud();
+    return true;
+  }
+  if (state.mode === 'shelf' || state.mode === 'checkout') {
+    const price = state.mode === 'shelf' ? ECONOMY.buildShelf : ECONOMY.buildCheckout;
+    if (state.money < price) { showToast('Không đủ tiền'); return true; }
+    const res = placeBuilding(cell, state.mode);
+    if (!res.ok) { showToast(res.reason); return true; }
+    state.money -= res.price;
+    refreshActorsBuildings(actors, cells);
+    const p = cellCenter(cell, state.originX, state.originY);
+    addSpark(fx, p.x, p.y, state.mode === 'shelf' ? '#4f9dff' : '#e6b422');
+    addFloat(fx, p.x, p.y - 8, `+${res.type.label}`, BRAND.colors.accent);
+    syncHud();
+    return true;
+  }
+  return false;
 }
 
 function worldFromCustomer(c) {
@@ -419,8 +497,10 @@ function onPointerUp(e) {
   if (state.dragging && !state.moved) {
     if (!collectMoney(e.clientX, e.clientY)) {
       state.selected = pickCell(e.clientX, e.clientY);
-      // Tap kệ hết hàng → restock nhanh cho demo M2.
-      if (state.selected?.building === 'shelf' && state.selected.stock <= 0) {
+      if (state.mode) {
+        tryBuildOn(state.selected);
+      } else if (state.selected?.building === 'shelf' && state.selected.stock <= 0) {
+        // Tap kệ hết hàng → restock nhanh.
         state.selected.stock = state.selected.stockCap;
         const p = cellCenter(state.selected, state.originX, state.originY);
         addSpark(fx, p.x, p.y, '#22c55e');
@@ -434,6 +514,10 @@ function onPointerUp(e) {
 
 function update(dt) {
   state.time += dt;
+  if (state.toastT > 0) {
+    state.toastT -= dt;
+    if (state.toastT <= 0) $('toast')?.classList.remove('show');
+  }
   forEachCell(cells, cell => {
     if (cell.pulse > 0) cell.pulse = Math.max(0, cell.pulse - dt);
   });
@@ -464,6 +548,8 @@ function openStore() {
   spawnCustomer(actors, cells);
   spawnCustomer(actors, cells);
   actors.spawnT = 1.2;
+  state.level = storeLevel(cells);
+  syncDock();
   syncHud();
 }
 
@@ -480,6 +566,10 @@ function boot() {
       $('speedBtn').textContent = `x${state.speed}`;
     };
   }
+  $('btnUnlock').onclick = () => setMode('unlock');
+  $('btnShelf').onclick = () => setMode('shelf');
+  $('btnCheckout').onclick = () => setMode('checkout');
+  $('btnCancel').onclick = () => { state.mode = null; syncDock(); syncHud(); };
   addEventListener('resize', resize);
   canvas.addEventListener('pointerdown', onPointerDown);
   addEventListener('pointermove', onPointerMove);
@@ -489,6 +579,7 @@ function boot() {
     document.addEventListener(ev, e => e.preventDefault(), { passive: false });
   }
   document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  syncDock();
   resize();
   requestAnimationFrame(frame);
 }

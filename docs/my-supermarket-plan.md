@@ -92,17 +92,19 @@ Backlog: C1, E1, E2, F1, G1 (phần tiền/tốc độ).
 
 ## Pha 3 — Xây lớn theo ô lưới
 
+**Trạng thái:** đang chờ duyệt M3 trên điện thoại.
+
 **Mục tiêu:** chứng minh thesis prototype: muốn xây để map lớn hơn.
 
 Việc cần làm:
 
-1. Nút **Xây**: chọn kệ/quầy → tap ô `empty`.
-2. Nút **Mở ô**: `locked` kề vùng đã mở → trả tiền → `empty`.
-3. Giá tăng dần theo tiến độ.
-4. Store Level theo số ô/công trình.
-5. Feedback rõ: map rộng hơn, toast lên cấp.
+1. [x] Nút **Xây**: chọn kệ/quầy → tap ô `empty`.
+2. [x] Nút **Mở ô**: `locked` kề vùng đã mở → trả tiền → `empty`.
+3. [x] Giá tăng dần theo tiến độ.
+4. [x] Store Level theo số ô/công trình.
+5. [x] Feedback rõ: map rộng hơn, toast lên cấp.
 
-**Đầu ra:** từ tiền tap-thu có thể mở ô và đặt thêm kệ.  
+**Đầu ra:** https://giangdao-vizion.github.io/cute-3d-heroes-demo/supermarket.html?v=m3  
 **Tiêu chí xong:** trong ~90 giây, người chơi tự muốn mở rộng ít nhất 1 lần.
 
 Backlog: B3, C2, C3, G2.

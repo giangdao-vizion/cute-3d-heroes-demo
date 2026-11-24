@@ -30,12 +30,12 @@ export const GRID = {
 };
 
 export const ECONOMY = {
-  startMoney: 120,
-  unlockCellBase: 40,
-  unlockCellStep: 15,
-  buildShelf: 55,
-  buildCheckout: 80,
-  buildStockroom: 70,
+  startMoney: 160,
+  unlockCellBase: 35,
+  unlockCellStep: 12,
+  buildShelf: 50,
+  buildCheckout: 75,
+  buildStockroom: 65,
   restockPack: 25,
   autoCollect: 220,
 };
@@ -52,7 +52,7 @@ export const SKUS = [
 ];
 
 export const PHASE = {
-  id: 'M2d',
-  title: 'Pha 2 — Nhân vật & hiệu ứng',
-  reviewNote: 'Mỗi ô: trên là đồ, dưới là khung chữ · chạm tiền để thu',
+  id: 'M3',
+  title: 'Pha 3 — Xây lớn theo ô',
+  reviewNote: 'Mở ô khóa hoặc xây kệ/quầy để siêu thị lớn hơn',
 };
