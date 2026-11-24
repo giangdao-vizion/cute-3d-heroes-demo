@@ -30,35 +30,39 @@ Có game **My Supermarket** tại `supermarket.html`, chơi được trên iPhon
 
 ## Pha 0 — Khóa sản xuất (trước code nặng)
 
+**Trạng thái:** đã chốt trong `js/supermarket/config.js` (palette, grid 8×8 với 4×4 mở sẵn, economy, 8 SKU). URL riêng `/supermarket.html` đến hết prototype; chưa gắn thẻ `index.html`.
+
 **Mục tiêu:** đủ thông số để không phải đoán khi code.
 
 Việc cần làm:
 
-1. Chốt palette 5 màu + font chữ My Supermarket.
-2. Chốt kích thước grid khởi đầu (đề xuất `6×6` usable).
-3. Chốt bảng giá nháp: mở ô, xây kệ, xây quầy, gói nhập hàng, auto-collect.
-4. Chốt 8 SKU tên/giá/cost/popularity.
-5. Quyết định: có gắn thẻ vào `index.html` ngay từ Pha 1 hay để URL riêng đến hết prototype.
+1. [x] Chốt palette 5 màu + font chữ My Supermarket.
+2. [x] Chốt kích thước grid khởi đầu.
+3. [x] Chốt bảng giá nháp: mở ô, xây kệ, xây quầy, gói nhập hàng, auto-collect.
+4. [x] Chốt 8 SKU tên/giá/cost/popularity.
+5. [x] Quyết định: URL riêng đến hết prototype.
 
-**Đầu ra:** 1 trang thông số ngắn (có thể bổ sung vào design doc).  
+**Đầu ra:** `js/supermarket/config.js`.  
 **Tiêu chí xong:** không còn câu hỏi “giá bao nhiêu / lưới bao lớn / màu gì” để bắt đầu Pha 1.
 
 ---
 
 ## Pha 1 — Khung game & map lưới
 
+**Trạng thái:** đang chờ duyệt M1 trên điện thoại.
+
 **Mục tiêu:** vào được thế giới My Supermarket trên iPhone.
 
 Việc cần làm:
 
-1. Tạo `supermarket.html` + `js/supermarket/main.js` full-page.
-2. Shell brand: title, màu, nút **Mở cửa**, favicon placeholder.
-3. Engine isometric tối thiểu: quy đổi grid ↔ screen, render sàn.
-4. Data lưới: ô `locked / empty / occupied`.
-5. Camera fit portrait; chạm không làm zoom trang.
+1. [x] Tạo `supermarket.html` + `js/supermarket/main.js` full-page.
+2. [x] Shell brand: title, màu, nút **Mở cửa**, favicon placeholder.
+3. [x] Engine isometric tối thiểu: quy đổi grid ↔ screen, render sàn.
+4. [x] Data lưới: ô `locked / empty / occupied`.
+5. [x] Camera fit portrait; chạm không làm zoom trang.
 
-**Đầu ra:** mở `/supermarket.html` thấy map lưới brand riêng.  
-**Tiêu chí xong:** chạy ổn ở 390×844, không lộ nền lỗi, tap được trên map.
+**Đầu ra:** https://giangdao-vizion.github.io/cute-3d-heroes-demo/supermarket.html  
+**Tiêu chí xong:** chạy ổn trên iPhone, không lộ nền lỗi, tap được trên map.
 
 Backlog: A1, A2, B1, B2, I1 (placeholder).
 
