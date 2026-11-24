@@ -1,7 +1,7 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2c';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2c';
-import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2c';
-import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2c';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2d';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2d';
+import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2d';
+import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2d';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
@@ -93,9 +93,19 @@ function drawFloorTile(cell) {
   ctx.stroke();
 
   if (cell.state === 'locked') {
-    const chipH = Math.max(12, Math.floor(h * 0.28));
-    drawStatusChip(x + 6, y + (h - chipH) / 2, w - 12, chipH, 'Khóa', {
-      bg: 'rgba(255,253,247,.92)',
+    const statusH = Math.max(13, Math.floor(h * 0.3));
+    const pad = 4;
+    // Vùng trên trống có họa tiết nhẹ, chữ chỉ nằm khung dưới.
+    ctx.strokeStyle = 'rgba(31,58,70,.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y + 10);
+    ctx.lineTo(x + w - 8, y + h - statusH - pad - 6);
+    ctx.moveTo(x + w - 8, y + 10);
+    ctx.lineTo(x + 8, y + h - statusH - pad - 6);
+    ctx.stroke();
+    drawStatusChip(x + pad, y + h - statusH - pad, w - pad * 2, statusH, 'Khóa', {
+      bg: 'rgba(255,253,247,.95)',
       fg: '#5b6f78',
       stroke: 'rgba(31,58,70,.16)',
     });
@@ -119,6 +129,35 @@ function drawStatusChip(x, y, w, h, text, opts = {}) {
   ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
 }
 
+function drawSplitBuilding(x, y, w, h, { shell, shellStroke, contentBg, statusText, statusOpts, drawContent }) {
+  const statusH = Math.max(13, Math.floor(h * 0.3));
+  const pad = 3;
+
+  // Vỏ ngoài ô.
+  ctx.fillStyle = 'rgba(31,58,70,.10)';
+  roundRect(x + 2, y + 3, w, h, 7);
+  ctx.fill();
+  ctx.fillStyle = shell;
+  roundRect(x, y, w, h, 7);
+  ctx.fill();
+  ctx.strokeStyle = shellStroke;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // Panel nội dung phía trên (không có chữ).
+  const contentX = x + pad;
+  const contentY = y + pad;
+  const contentW = w - pad * 2;
+  const contentH = h - statusH - pad * 2;
+  ctx.fillStyle = contentBg;
+  roundRect(contentX, contentY, contentW, contentH, 5);
+  ctx.fill();
+  drawContent?.(contentX, contentY, contentW, contentH);
+
+  // Panel chữ riêng phía dưới.
+  drawStatusChip(x + pad, y + h - statusH - pad, w - pad * 2, statusH, statusText, statusOpts);
+}
+
 function drawTopDownShelf(cell, x, y, w, h) {
   const pulse = cell.pulse > 0 ? 1 + Math.sin(state.time * 20) * 0.03 : 1;
   const cx = x + w / 2;
@@ -129,132 +168,79 @@ function drawTopDownShelf(cell, x, y, w, h) {
   ctx.translate(-cx, -cy);
 
   const empty = (cell.stock ?? 0) <= 0;
-  const chipH = Math.max(12, Math.floor(h * 0.28));
-  const gap = 3;
-  const bodyH = h - chipH - gap;
-
-  // Khung công trình.
-  ctx.fillStyle = 'rgba(31,58,70,.12)';
-  roundRect(x + 2, y + 3, w, h, 6);
-  ctx.fill();
-  ctx.fillStyle = empty ? '#8aa4b0' : '#4f93b0';
-  roundRect(x, y, w, h, 6);
-  ctx.fill();
-  ctx.strokeStyle = empty ? '#6c838e' : '#2f647a';
-  ctx.lineWidth = 1.6;
-  ctx.stroke();
-
-  // Vùng hàng hóa (phía trên) — không chồng chữ.
-  const cols = 2;
-  const rows = 2;
-  const pad = 4;
-  const areaX = x + pad;
-  const areaY = y + pad;
-  const areaW = w - pad * 2;
-  const areaH = bodyH - pad;
-  const gw = (areaW - pad * (cols - 1)) / cols;
-  const gh = (areaH - pad * (rows - 1)) / rows;
-  const filledSlots = Math.ceil(((cell.stock ?? 0) / Math.max(1, cell.stockCap || 12)) * 4);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const idx = r * cols + c;
-      const gx = areaX + c * (gw + pad);
-      const gy = areaY + r * (gh + pad);
-      ctx.fillStyle = '#eef8ff';
-      roundRect(gx, gy, gw, gh, 3);
-      ctx.fill();
-      if (idx < filledSlots) {
-        const sku = SKUS[(cell.x + cell.y + idx) % SKUS.length];
-        const bob = Math.sin(state.time * 4 + idx) * 0.8;
-        ctx.fillStyle = sku.color;
-        ctx.beginPath();
-        ctx.arc(gx + gw / 2, gy + gh / 2 + bob, Math.min(gw, gh) * 0.22, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(31,58,70,.2)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    }
-  }
-
-  // Khung trạng thái riêng phía dưới trong ô.
-  drawStatusChip(
-    x + 4,
-    y + h - chipH - 3,
-    w - 8,
-    chipH,
-    empty ? 'Hết hàng' : `${cell.stock}/${cell.stockCap}`,
-    empty
+  drawSplitBuilding(x, y, w, h, {
+    shell: empty ? '#8aa4b0' : '#4f93b0',
+    shellStroke: empty ? '#6c838e' : '#2f647a',
+    contentBg: '#eef8ff',
+    statusText: empty ? 'Hết hàng' : `${cell.stock}/${cell.stockCap}`,
+    statusOpts: empty
       ? { bg: '#fee2e2', fg: BRAND.colors.danger, stroke: '#fca5a5' }
       : { bg: '#fffdf7', fg: BRAND.colors.ink, stroke: 'rgba(31,58,70,.16)' },
-  );
+    drawContent: (cx0, cy0, cw, ch) => {
+      const cols = 2;
+      const rows = 2;
+      const gap = 3;
+      const gw = (cw - gap * (cols + 1)) / cols;
+      const gh = (ch - gap * (rows + 1)) / rows;
+      const filledSlots = Math.ceil(((cell.stock ?? 0) / Math.max(1, cell.stockCap || 12)) * 4);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          const gx = cx0 + gap + c * (gw + gap);
+          const gy = cy0 + gap + r * (gh + gap);
+          ctx.fillStyle = '#dff0fa';
+          roundRect(gx, gy, gw, gh, 3);
+          ctx.fill();
+          if (idx < filledSlots) {
+            const sku = SKUS[(cell.x + cell.y + idx) % SKUS.length];
+            const bob = Math.sin(state.time * 4 + idx) * 0.7;
+            ctx.fillStyle = sku.color;
+            ctx.beginPath();
+            ctx.arc(gx + gw / 2, gy + gh / 2 + bob, Math.min(gw, gh) * 0.23, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    },
+  });
   ctx.restore();
 }
 
 function drawTopDownCheckout(x, y, w, h) {
-  const chipH = Math.max(12, Math.floor(h * 0.28));
-  const gap = 3;
-  const bodyH = h - chipH - gap;
-
-  ctx.fillStyle = 'rgba(31,58,70,.12)';
-  roundRect(x + 2, y + 3, w, h, 6);
-  ctx.fill();
-  ctx.fillStyle = '#f0c94a';
-  roundRect(x, y, w, h, 6);
-  ctx.fill();
-  ctx.strokeStyle = '#a67c00';
-  ctx.lineWidth = 1.6;
-  ctx.stroke();
-
-  // Vùng băng chuyền riêng.
-  ctx.fillStyle = '#fff7d1';
-  roundRect(x + 5, y + 5, w - 10, bodyH - 6, 4);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(166,124,0,.25)';
-  ctx.stroke();
-  // Vạch băng chuyền.
-  ctx.strokeStyle = 'rgba(166,124,0,.35)';
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 2; i++) {
-    const yy = y + 5 + (bodyH - 6) * (i / 3);
-    ctx.beginPath();
-    ctx.moveTo(x + 8, yy);
-    ctx.lineTo(x + w - 8, yy);
-    ctx.stroke();
-  }
-
-  drawStatusChip(x + 4, y + h - chipH - 3, w - 8, chipH, 'PAY', {
-    bg: '#fff8e1',
-    fg: BRAND.colors.ink,
-    stroke: '#e0b84a',
+  drawSplitBuilding(x, y, w, h, {
+    shell: '#f0c94a',
+    shellStroke: '#a67c00',
+    contentBg: '#fff7d1',
+    statusText: 'PAY',
+    statusOpts: { bg: '#fffdf7', fg: BRAND.colors.ink, stroke: '#e0b84a' },
+    drawContent: (cx0, cy0, cw, ch) => {
+      ctx.strokeStyle = 'rgba(166,124,0,.35)';
+      ctx.lineWidth = 1.2;
+      for (let i = 1; i <= 2; i++) {
+        const yy = cy0 + ch * (i / 3);
+        ctx.beginPath();
+        ctx.moveTo(cx0 + 4, yy);
+        ctx.lineTo(cx0 + cw - 4, yy);
+        ctx.stroke();
+      }
+    },
   });
 }
 
 function drawTopDownStock(x, y, w, h) {
-  const chipH = Math.max(12, Math.floor(h * 0.28));
-  const gap = 3;
-  const bodyH = h - chipH - gap;
-
-  ctx.fillStyle = 'rgba(31,58,70,.12)';
-  roundRect(x + 2, y + 3, w, h, 6);
-  ctx.fill();
-  ctx.fillStyle = '#8b6b4a';
-  roundRect(x, y, w, h, 6);
-  ctx.fill();
-  ctx.strokeStyle = '#5c3f27';
-  ctx.lineWidth = 1.6;
-  ctx.stroke();
-
-  ctx.fillStyle = '#f0e2c8';
-  roundRect(x + w * 0.18, y + 5, w * 0.64, bodyH - 6, 4);
-  ctx.fill();
-  ctx.strokeStyle = '#c4a57a';
-  ctx.stroke();
-
-  drawStatusChip(x + 4, y + h - chipH - 3, w - 8, chipH, 'Kho', {
-    bg: '#f7efe4',
-    fg: '#5c3f27',
-    stroke: '#d2b48c',
+  drawSplitBuilding(x, y, w, h, {
+    shell: '#8b6b4a',
+    shellStroke: '#5c3f27',
+    contentBg: '#f0e2c8',
+    statusText: 'Kho',
+    statusOpts: { bg: '#fff8ef', fg: '#5c3f27', stroke: '#d2b48c' },
+    drawContent: (cx0, cy0, cw, ch) => {
+      ctx.fillStyle = '#e4d0b0';
+      roundRect(cx0 + cw * 0.18, cy0 + ch * 0.18, cw * 0.64, ch * 0.64, 4);
+      ctx.fill();
+      ctx.strokeStyle = '#c4a57a';
+      ctx.stroke();
+    },
   });
 }
 
