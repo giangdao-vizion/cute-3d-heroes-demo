@@ -1,7 +1,7 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2d';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2d';
-import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2d';
-import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2d';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2e';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2e';
+import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2e';
+import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2e';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
@@ -95,14 +95,15 @@ function drawFloorTile(cell) {
   if (cell.state === 'locked') {
     const statusH = Math.max(13, Math.floor(h * 0.3));
     const pad = 4;
-    // Vùng trên trống có họa tiết nhẹ, chữ chỉ nằm khung dưới.
+    const contentBottom = y + h - statusH - pad * 2;
+    // Họa tiết chỉ trong vùng nội dung, không đụng khung chữ.
     ctx.strokeStyle = 'rgba(31,58,70,.10)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x + 8, y + 10);
-    ctx.lineTo(x + w - 8, y + h - statusH - pad - 6);
+    ctx.lineTo(x + w - 8, contentBottom);
     ctx.moveTo(x + w - 8, y + 10);
-    ctx.lineTo(x + 8, y + h - statusH - pad - 6);
+    ctx.lineTo(x + 8, contentBottom);
     ctx.stroke();
     drawStatusChip(x + pad, y + h - statusH - pad, w - pad * 2, statusH, 'Khóa', {
       bg: 'rgba(255,253,247,.95)',
