@@ -53,7 +53,7 @@ function syncHome() {
     button.classList.toggle('on', on);
     button.setAttribute('aria-pressed', String(on));
   });
-  const labels = { game: 'Đấu trường', defense: 'Giữ cổng', survivor: 'Sinh tồn' };
+  const labels = { game: 'Đấu trường', defense: 'Giữ cổng', survivor: 'Sinh tồn', store: 'Store Empire' };
   $('startAdventure').innerHTML = `Chơi ${labels[selectedMode]} <span aria-hidden="true">→</span>`;
 }
 
@@ -151,6 +151,10 @@ async function setMode(nextMode) {
   }
   if (nextMode === 'survivor') {
     openSurvivorArena();
+    return;
+  }
+  if (nextMode === 'store') {
+    location.href = 'store-empire/';
     return;
   }
 

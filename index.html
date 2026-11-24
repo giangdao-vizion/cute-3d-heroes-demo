@@ -97,7 +97,8 @@
   .mode-pick:nth-child(1) { background:linear-gradient(145deg,#ff996f,#f35f67); }
   .mode-pick:nth-child(2) { background:linear-gradient(145deg,#4fa8ff,#3569d8); }
   .mode-pick:nth-child(3) { background:linear-gradient(145deg,#a879f7,#7043ce); }
-  .mode-pick:last-child { grid-column:1 / -1; min-height:84px; }
+  .mode-pick:nth-child(4) { background:linear-gradient(145deg,#3ccf91,#1f9a6b); }
+  .mode-pick:last-child:nth-child(odd) { grid-column:1 / -1; min-height:84px; }
   .mode-pick .mode-icon { display:block; margin-bottom:5px; font-size:29px; line-height:1; }
   .mode-pick b, .mode-pick small { display:block; }
   .mode-pick b { font-size:16px; line-height:1.05; }
@@ -323,11 +324,12 @@
         </button>
       </section>
       <section class="home-card" aria-labelledby="modeTitle">
-        <div class="section-title"><h2 id="modeTitle">2. Chọn chế độ</h2><span>3 cách chơi</span></div>
+        <div class="section-title"><h2 id="modeTitle">2. Chọn chế độ</h2><span>4 cách chơi</span></div>
         <div class="mode-picker">
           <button class="mode-pick" data-mode="game"><span class="mode-icon">⚔️</span><b>Đấu trường</b><small>Đánh quái theo từng đợt</small></button>
           <button class="mode-pick on" data-mode="defense"><span class="mode-icon">🏰</span><b>Giữ cổng</b><small>Phòng thủ cây cầu vô tận</small></button>
           <button class="mode-pick" data-mode="survivor"><span class="mode-icon">💫</span><b>Sinh tồn</b><small>Di chuyển, lên cấp, nâng cấp</small></button>
+          <button class="mode-pick" data-mode="store"><span class="mode-icon">🏪</span><b>Store Empire</b><small>Từ nhân viên thành ông chủ</small></button>
         </div>
       </section>
     </div>

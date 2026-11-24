@@ -38,6 +38,8 @@ Cần internet lần đầu để tải Three.js và font từ CDN. Model nằm 
 | Ultimate Animated Animals | Quaternius | Shiba, Cáo, Husky | https://quaternius.com/packs/ultimateanimatedanimals.html |
 | Dungeon Remastered 1.0 | Kay Lousberg (KayKit) | Rương, chồng vàng, khiên kiếm (icon + hòm quà trong Giữ cổng) | https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0 |
 | Platformer Game Kit, Modular Weapons, Modular Dungeon | Quaternius | Sao, ngọc, tim, bom, kiếm vàng, khiên, đầu lâu, bình thuốc (icon) | https://quaternius.com/packs/ultimateplatformer.html |
+| Mini Shop 2.1 | Kenney | Kệ, quầy thu ngân, tủ đông, tường, hàng rào, cổng, nhân viên (Store Empire) | https://kenney.nl/assets/mini-market |
+| Mini Characters 2.0 | Kenney | 20 nhân vật người thường, 32 animation mỗi con (Store Empire) | https://kenney.nl/assets/mini-characters-1 |
 | Sunfall Rift – Ember projectile | 3DAssets.dev | Model cầu lửa GLB 56 tam giác dùng trong Đấu trường sinh tồn | https://3dassets.dev/assets/sunfall-rift-moba-ember-projectile-49569ecb |
 
 File GLB lấy từ GitHub: `KayKit-Game-Assets/KayKit-Character-Pack-*-1.0` và bản GLB đã chuyển sẵn ở `trebeljahr/quaternius-showcase`.
@@ -50,4 +52,5 @@ File GLB lấy từ GitHub: `KayKit-Game-Assets/KayKit-Character-Pack-*-1.0` và
 - `js/main.js` – trang chủ và bộ chọn nhân vật 2D. `js/game.js` – game arena. `js/defense.js` – chế độ Giữ cổng. `js/state.js` – lựa chọn lưu trong localStorage.
 - `survivor-arena.html`, `js/survivor/` – trang và logic riêng của Đấu Trường Sinh Tồn.
 - `docs/dau-truong-sinh-ton-design.md` – kế hoạch chi tiết cho game Đấu Trường Sinh Tồn 360°.
+- `store-empire-src/` – source Store Empire (React + TypeScript + Vite + React Three Fiber). `npm install` một lần, `npm run dev` để chạy thử, `npm run build` để build ra `store-empire/` (thư mục này được commit để GitHub Pages phục vụ). Kế hoạch: `docs/store-empire-plan.md`.
 - `docs/y-tuong-game-sinh-ton.md` – backlog các game survival để nghiên cứu và triển khai sau.
