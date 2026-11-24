@@ -8,7 +8,7 @@ Tài liệu khóa quyết định sản phẩm trước khi làm prototype. Mụ
 |---|---|
 | Brand | **My Supermarket** (brand riêng, không dùng nhận diện Cute Heroes) |
 | Hướng chơi | **Idle-tap**: khách/nhân viên tự chạy; người chơi tap để thu tiền, đặt hàng, restock, xây |
-| Góc nhìn | **Isometric 2.5D**, art **tile vẽ tay** |
+| Góc nhìn | **Top-down 2.5D** (ô vuông + công trình có chiều cao), art **tile vẽ tay**. Đã bỏ isometric diamond vì khó đọc/xấu trên iPhone |
 | Mục tiêu prototype | Chứng minh cảm giác **xây lớn** trên lưới ô |
 | Mở rộng | **Theo ô lưới (grid build)** |
 | Thu tiền | **Tap thu lúc đầu**; nâng cấp mới mở **thu tự động** |

@@ -25,19 +25,18 @@ function seed(cells, x, y, building) {
   cell.building = building;
 }
 
-export function gridToScreen(x, y, originX, originY, tileW = GRID.tileW, tileH = GRID.tileH) {
+export function gridToScreen(x, y, originX, originY, tile = GRID.tile) {
   return {
-    x: originX + (x - y) * (tileW / 2),
-    y: originY + (x + y) * (tileH / 2),
+    x: originX + x * tile,
+    y: originY + y * tile,
   };
 }
 
-export function screenToGrid(sx, sy, originX, originY, tileW = GRID.tileW, tileH = GRID.tileH) {
-  const dx = sx - originX;
-  const dy = sy - originY;
-  const x = Math.round((dx / (tileW / 2) + dy / (tileH / 2)) / 2);
-  const y = Math.round((dy / (tileH / 2) - dx / (tileW / 2)) / 2);
-  return { x, y };
+export function screenToGrid(sx, sy, originX, originY, tile = GRID.tile) {
+  return {
+    x: Math.floor((sx - originX) / tile),
+    y: Math.floor((sy - originY) / tile),
+  };
 }
 
 export function forEachCell(cells, fn) {

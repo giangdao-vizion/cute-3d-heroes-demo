@@ -57,7 +57,7 @@ Việc cần làm:
 
 1. [x] Tạo `supermarket.html` + `js/supermarket/main.js` full-page.
 2. [x] Shell brand: title, màu, nút **Mở cửa**, favicon placeholder.
-3. [x] Engine isometric tối thiểu: quy đổi grid ↔ screen, render sàn.
+3. [x] Engine top-down 2.5D: quy đổi grid ↔ screen, sàn ô vuông, công trình có chiều cao.
 4. [x] Data lưới: ô `locked / empty / occupied`.
 5. [x] Camera fit portrait; chạm không làm zoom trang.
 

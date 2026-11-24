@@ -36,9 +36,9 @@ Quy ước:
 
 ### B1. Camera & map stage `[P0]`
 
-- [ ] Stage canvas hoặc DOM/canvas hybrid cho isometric.
-- [ ] Chuyển toạ độ `grid(x,y) ↔ screen`.
-- [ ] Pan nhẹ trong biên; fit map vào iPhone dọc.
+- [x] Stage canvas top-down 2.5D (không dùng isometric diamond).
+- [x] Chuyển toạ độ `grid(x,y) ↔ screen` theo ô vuông.
+- [x] Pan nhẹ; fit map vào iPhone dọc.
 - [ ] Zoom cố định v1 (hoặc 2 mức), ưu tiên đọc được ô xây.
 
 ### B2. Mô hình lưới `[P0]`

@@ -156,7 +156,7 @@ Trang dự kiến: `four-fronts.html`.
 
 ## 6. My Supermarket (ý tưởng quản lý)
 
-Game quản lý siêu thị brand riêng **My Supermarket**: idle-tap, isometric tile vẽ tay, xây lớn theo ô lưới, tồn kho SKU chi tiết, thu tiền tap-first rồi nâng cấp auto-collect. Không phải game sinh tồn; ghi ở đây để theo dõi chung backlog sảnh game.
+Game quản lý siêu thị brand riêng **My Supermarket**: idle-tap, top-down 2.5D tile vẽ tay, xây lớn theo ô lưới, tồn kho SKU chi tiết, thu tiền tap-first rồi nâng cấp auto-collect. Không phải game sinh tồn; ghi ở đây để theo dõi chung backlog sảnh game.
 
 - Hướng đã chốt: [`sieu-thi-quan-ly-design.md`](./sieu-thi-quan-ly-design.md)
 - Backlog kỹ thuật: [`my-supermarket-backlog.md`](./my-supermarket-backlog.md)

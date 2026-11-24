@@ -26,8 +26,9 @@ export const GRID = {
     [2, 4], [3, 4], [4, 4], [5, 4],
     [2, 5], [3, 5], [4, 5], [5, 5],
   ],
-  tileW: 72,
-  tileH: 36,
+  // Top-down 2.5D: ô vuông, công trình có chiều cao.
+  tile: 58,
+  view: 'topdown-25d',
 };
 
 export const ECONOMY = {
@@ -53,7 +54,7 @@ export const SKUS = [
 ];
 
 export const PHASE = {
-  id: 'M1',
-  title: 'Pha 1 — Khung map lưới',
-  reviewNote: 'Duyệt map isometric + brand. Chạm ô để xem trạng thái, kéo để xem map.',
+  id: 'M1b',
+  title: 'Pha 1 — Map top-down 2.5D',
+  reviewNote: 'Duyệt góc nhìn mới: top-down 2.5D. Chạm ô · kéo map.',
 };

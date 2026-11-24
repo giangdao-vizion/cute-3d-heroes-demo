@@ -39,64 +39,155 @@ function resize() {
 }
 
 function centerMap() {
-  const mid = gridToScreen((GRID.width - 1) / 2, (GRID.height - 1) / 2, 0, 0);
-  state.originX = innerWidth / 2 - mid.x;
-  state.originY = innerHeight * 0.42 - mid.y;
+  const mapW = GRID.width * GRID.tile;
+  const mapH = GRID.height * GRID.tile;
+  state.originX = (innerWidth - mapW) / 2;
+  state.originY = innerHeight * 0.18 + Math.max(0, (innerHeight * 0.62 - mapH) / 2);
 }
 
-function drawHandTile(x, y, fill, stroke, jitter = 1.2) {
-  const p = gridToScreen(x, y, state.originX, state.originY);
-  const hw = GRID.tileW / 2;
-  const hh = GRID.tileH / 2;
-  const j = (n) => ((Math.sin((x + 1) * 12.3 + (y + 1) * 7.1 + n) * 0.5 + 0.5) - 0.5) * jitter;
-  ctx.beginPath();
-  ctx.moveTo(p.x + j(1), p.y - hh + j(2));
-  ctx.lineTo(p.x + hw + j(3), p.y + j(4));
-  ctx.lineTo(p.x + j(5), p.y + hh + j(6));
-  ctx.lineTo(p.x - hw + j(7), p.y + j(8));
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = 1.6;
-  ctx.stroke();
-  return p;
-}
-
-function drawBuilding(p, type) {
-  ctx.save();
-  ctx.translate(p.x, p.y - 8);
-  if (type === 'shelf') {
-    ctx.fillStyle = BRAND.colors.shelf;
-    roundRect(-16, -18, 32, 22, 4);
-    ctx.fill();
-    ctx.fillStyle = '#eff8ff';
-    roundRect(-12, -14, 10, 8, 2); ctx.fill();
-    roundRect(2, -14, 10, 8, 2); ctx.fill();
-  } else if (type === 'checkout') {
-    ctx.fillStyle = BRAND.colors.money;
-    roundRect(-18, -14, 36, 18, 5); ctx.fill();
-    ctx.fillStyle = BRAND.colors.ink;
-    ctx.font = '700 11px "Baloo 2", system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('PAY', 0, -1);
-  } else if (type === 'stockroom') {
-    ctx.fillStyle = '#8b6b4a';
-    roundRect(-18, -20, 36, 24, 4); ctx.fill();
-    ctx.fillStyle = '#f0e2c8';
-    roundRect(-8, -8, 16, 10, 2); ctx.fill();
-  }
-  ctx.restore();
+function jitter(x, y, n, amount = 1.1) {
+  return ((Math.sin((x + 3) * 9.1 + (y + 2) * 5.7 + n * 2.3) * 0.5 + 0.5) - 0.5) * amount;
 }
 
 function roundRect(x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
+}
+
+function drawFloorTile(cell) {
+  const t = GRID.tile;
+  const p = gridToScreen(cell.x, cell.y, state.originX, state.originY);
+  const selected = state.selected && state.selected.x === cell.x && state.selected.y === cell.y;
+  const pad = 2;
+  const x = p.x + pad + jitter(cell.x, cell.y, 1, 0.6);
+  const y = p.y + pad + jitter(cell.x, cell.y, 2, 0.6);
+  const w = t - pad * 2;
+  const h = t - pad * 2;
+
+  let fill = '#eef6dc';
+  let stroke = '#c9dbb0';
+  if (cell.state === 'locked') {
+    fill = '#c5d3d8';
+    stroke = '#9aafb7';
+  } else if (cell.state === 'occupied') {
+    fill = '#e7f0cf';
+    stroke = '#b7cb8f';
+  }
+  if (selected) {
+    fill = '#fff1b8';
+    stroke = '#e0a800';
+  }
+
+  // Bóng sàn nhẹ.
+  ctx.fillStyle = 'rgba(31,58,70,.08)';
+  roundRect(x + 2, y + 3, w, h, 10);
+  ctx.fill();
+
+  ctx.fillStyle = fill;
+  roundRect(x, y, w, h, 10);
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.7;
+  ctx.stroke();
+
+  // Vân gạch tay vẽ rất nhẹ.
+  if (cell.state !== 'locked') {
+    ctx.strokeStyle = 'rgba(159,191,122,.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y + h * 0.55);
+    ctx.lineTo(x + w - 8, y + h * 0.55);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = 'rgba(31,58,70,.22)';
+    ctx.font = '700 14px "Baloo 2", system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔒', x + w / 2, y + h / 2);
+  }
+}
+
+function drawBox25D(x, y, w, depth, height, top, side, front, stroke) {
+  // Nhìn hơi nghiêng: mặt trên + cạnh phải + mặt trước.
+  const topY = y - height;
+  ctx.beginPath();
+  ctx.moveTo(x, topY + depth);
+  ctx.lineTo(x + w, topY + depth);
+  ctx.lineTo(x + w + depth, topY);
+  ctx.lineTo(x + depth, topY);
+  ctx.closePath();
+  ctx.fillStyle = top;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x + w, topY + depth);
+  ctx.lineTo(x + w + depth, topY);
+  ctx.lineTo(x + w + depth, topY + height);
+  ctx.lineTo(x + w, topY + height + depth);
+  ctx.closePath();
+  ctx.fillStyle = side;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x, topY + depth);
+  ctx.lineTo(x + w, topY + depth);
+  ctx.lineTo(x + w, topY + height + depth);
+  ctx.lineTo(x, topY + height + depth);
+  ctx.closePath();
+  ctx.fillStyle = front;
+  ctx.fill();
+
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawBuilding(cell) {
+  if (!cell.building) return;
+  const t = GRID.tile;
+  const p = gridToScreen(cell.x, cell.y, state.originX, state.originY);
+  const cx = p.x + t / 2;
+  const baseY = p.y + t - 10;
+
+  if (cell.building === 'shelf') {
+    drawBox25D(cx - 18, baseY - 8, 30, 8, 26, '#7ec2dd', '#3f7f9b', BRAND.colors.shelf, '#2b5f74');
+    ctx.fillStyle = '#f4fbff';
+    roundRect(cx - 13, baseY - 26, 9, 7, 2); ctx.fill();
+    roundRect(cx - 1, baseY - 26, 9, 7, 2); ctx.fill();
+    roundRect(cx - 13, baseY - 16, 9, 7, 2); ctx.fill();
+    roundRect(cx - 1, baseY - 16, 9, 7, 2); ctx.fill();
+  } else if (cell.building === 'checkout') {
+    drawBox25D(cx - 20, baseY - 6, 34, 8, 18, '#f3d56b', '#c79a1d', BRAND.colors.money, '#8d6a08');
+    ctx.fillStyle = BRAND.colors.ink;
+    ctx.font = '800 11px "Baloo 2", system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('PAY', cx - 1, baseY - 10);
+  } else if (cell.building === 'stockroom') {
+    drawBox25D(cx - 18, baseY - 8, 30, 9, 28, '#c4a07a', '#7a5738', '#8b6b4a', '#5c3f27');
+    ctx.fillStyle = '#f3e6cf';
+    roundRect(cx - 7, baseY - 18, 12, 12, 3); ctx.fill();
+  }
+}
+
+function drawRoomFrame() {
+  const t = GRID.tile;
+  const x = state.originX - 10;
+  const y = state.originY - 10;
+  const w = GRID.width * t + 20;
+  const h = GRID.height * t + 20;
+  ctx.fillStyle = 'rgba(255,253,247,.55)';
+  roundRect(x, y, w, h, 22);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(31,58,70,.12)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 }
 
 function draw() {
@@ -109,37 +200,15 @@ function draw() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  // Sắp xếp painter's algorithm: x+y tăng dần.
+  drawRoomFrame();
+
+  // Vẽ sàn trước, công trình sau theo hàng để 2.5D chồng đúng.
+  forEachCell(cells, drawFloorTile);
   const list = [];
   forEachCell(cells, cell => list.push(cell));
-  list.sort((a, b) => (a.x + a.y) - (b.x + b.y) || a.x - b.x);
+  list.sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const cell of list) drawBuilding(cell);
 
-  for (const cell of list) {
-    const selected = state.selected && state.selected.x === cell.x && state.selected.y === cell.y;
-    let fill = BRAND.colors.floor;
-    let stroke = BRAND.colors.floorLine;
-    if (cell.state === 'locked') {
-      fill = '#b7c8cf';
-      stroke = '#8fa3ab';
-    } else if (cell.state === 'occupied') {
-      fill = '#eef6d8';
-      stroke = '#9fbf7a';
-    }
-    if (selected) {
-      fill = '#fff4c2';
-      stroke = BRAND.colors.money;
-    }
-    const p = drawHandTile(cell.x, cell.y, fill, stroke, cell.state === 'locked' ? 0.6 : 1.4);
-    if (cell.state === 'locked') {
-      ctx.fillStyle = 'rgba(31,58,70,.18)';
-      ctx.font = '700 12px "Baloo 2", system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('🔒', p.x, p.y + 4);
-    }
-    if (cell.building) drawBuilding(p, cell.building);
-  }
-
-  // Bóng nhẹ dưới HUD để map không đụng chữ.
   ctx.fillStyle = 'rgba(216,238,245,.55)';
   ctx.fillRect(0, 0, w, 92);
 }
@@ -147,7 +216,7 @@ function draw() {
 function syncHud() {
   $('money').textContent = `$${state.money}`;
   const counts = countByState(cells);
-  $('stats').textContent = `Mở ${counts.empty + counts.occupied}/${GRID.width * GRID.height} ô · Kệ ${(counts.occupied)}`;
+  $('stats').textContent = `Mở ${counts.empty + counts.occupied}/${GRID.width * GRID.height} ô · CT ${counts.occupied}`;
   if (state.selected) {
     const c = state.selected;
     const label = c.building || c.state;
