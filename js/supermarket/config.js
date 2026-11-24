@@ -26,9 +26,9 @@ export const GRID = {
     [2, 4], [3, 4], [4, 4], [5, 4],
     [2, 5], [3, 5], [4, 5], [5, 5],
   ],
-  // Top-down 2.5D: ô vuông, công trình có chiều cao.
+  // Nhìn thẳng từ trên xuống: ô vuông, vật thể là mặt trên (không skew isometric).
   tile: 58,
-  view: 'topdown-25d',
+  view: 'topdown',
 };
 
 export const ECONOMY = {
@@ -54,7 +54,7 @@ export const SKUS = [
 ];
 
 export const PHASE = {
-  id: 'M1b',
-  title: 'Pha 1 — Map top-down 2.5D',
-  reviewNote: 'Duyệt góc nhìn mới: top-down 2.5D. Chạm ô · kéo map.',
+  id: 'M1c',
+  title: 'Pha 1 — Map nhìn từ trên xuống',
+  reviewNote: 'Bản M1c: ô VUÔNG nhìn từ trên, không còn skew isometric. Chạm ô · kéo map.',
 };

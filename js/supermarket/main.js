@@ -1,5 +1,5 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState } from './grid.js';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m1c';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState } from './grid.js?v=m1c';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
@@ -42,11 +42,7 @@ function centerMap() {
   const mapW = GRID.width * GRID.tile;
   const mapH = GRID.height * GRID.tile;
   state.originX = (innerWidth - mapW) / 2;
-  state.originY = innerHeight * 0.18 + Math.max(0, (innerHeight * 0.62 - mapH) / 2);
-}
-
-function jitter(x, y, n, amount = 1.1) {
-  return ((Math.sin((x + 3) * 9.1 + (y + 2) * 5.7 + n * 2.3) * 0.5 + 0.5) - 0.5) * amount;
+  state.originY = innerHeight * 0.2 + Math.max(0, (innerHeight * 0.58 - mapH) / 2);
 }
 
 function roundRect(x, y, w, h, r) {
@@ -64,87 +60,109 @@ function drawFloorTile(cell) {
   const t = GRID.tile;
   const p = gridToScreen(cell.x, cell.y, state.originX, state.originY);
   const selected = state.selected && state.selected.x === cell.x && state.selected.y === cell.y;
-  const pad = 2;
-  const x = p.x + pad + jitter(cell.x, cell.y, 1, 0.6);
-  const y = p.y + pad + jitter(cell.x, cell.y, 2, 0.6);
-  const w = t - pad * 2;
-  const h = t - pad * 2;
+  const gap = 3;
+  const x = p.x + gap;
+  const y = p.y + gap;
+  const w = t - gap * 2;
+  const h = t - gap * 2;
 
-  let fill = '#eef6dc';
-  let stroke = '#c9dbb0';
+  // Lối đi vs ô khóa: nhìn thẳng từ trên, ô VUÔNG rõ.
+  let fill = ((cell.x + cell.y) % 2 === 0) ? '#f4f8e8' : '#eaf3d5';
+  let stroke = '#c5d8a8';
   if (cell.state === 'locked') {
-    fill = '#c5d3d8';
-    stroke = '#9aafb7';
-  } else if (cell.state === 'occupied') {
-    fill = '#e7f0cf';
-    stroke = '#b7cb8f';
+    fill = ((cell.x + cell.y) % 2 === 0) ? '#d5e0e5' : '#c9d7dd';
+    stroke = '#a7b8bf';
   }
   if (selected) {
-    fill = '#fff1b8';
+    fill = '#ffe9a8';
     stroke = '#e0a800';
   }
 
-  // Bóng sàn nhẹ.
-  ctx.fillStyle = 'rgba(31,58,70,.08)';
-  roundRect(x + 2, y + 3, w, h, 10);
-  ctx.fill();
-
   ctx.fillStyle = fill;
-  roundRect(x, y, w, h, 10);
+  roundRect(x, y, w, h, 8);
   ctx.fill();
   ctx.strokeStyle = stroke;
-  ctx.lineWidth = 1.7;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Vân gạch tay vẽ rất nhẹ.
-  if (cell.state !== 'locked') {
-    ctx.strokeStyle = 'rgba(159,191,122,.35)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + 8, y + h * 0.55);
-    ctx.lineTo(x + w - 8, y + h * 0.55);
-    ctx.stroke();
-  } else {
-    ctx.fillStyle = 'rgba(31,58,70,.22)';
-    ctx.font = '700 14px "Baloo 2", system-ui';
+  if (cell.state === 'locked') {
+    ctx.fillStyle = 'rgba(31,58,70,.28)';
+    ctx.font = '700 13px "Baloo 2", system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('🔒', x + w / 2, y + h / 2);
   }
 }
 
-function drawBox25D(x, y, w, depth, height, top, side, front, stroke) {
-  // Nhìn hơi nghiêng: mặt trên + cạnh phải + mặt trước.
-  const topY = y - height;
-  ctx.beginPath();
-  ctx.moveTo(x, topY + depth);
-  ctx.lineTo(x + w, topY + depth);
-  ctx.lineTo(x + w + depth, topY);
-  ctx.lineTo(x + depth, topY);
-  ctx.closePath();
-  ctx.fillStyle = top;
+function drawTopDownShelf(x, y, w, h) {
+  // Nhìn từ trên: mặt trên kệ + các ngăn hàng.
+  ctx.fillStyle = 'rgba(31,58,70,.12)';
+  roundRect(x + 2, y + 3, w, h, 6);
   ctx.fill();
 
-  ctx.beginPath();
-  ctx.moveTo(x + w, topY + depth);
-  ctx.lineTo(x + w + depth, topY);
-  ctx.lineTo(x + w + depth, topY + height);
-  ctx.lineTo(x + w, topY + height + depth);
-  ctx.closePath();
-  ctx.fillStyle = side;
+  ctx.fillStyle = '#4f93b0';
+  roundRect(x, y, w, h, 6);
   ctx.fill();
+  ctx.strokeStyle = '#2f647a';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
 
-  ctx.beginPath();
-  ctx.moveTo(x, topY + depth);
-  ctx.lineTo(x + w, topY + depth);
-  ctx.lineTo(x + w, topY + height + depth);
-  ctx.lineTo(x, topY + height + depth);
-  ctx.closePath();
-  ctx.fillStyle = front;
+  const cols = 2;
+  const rows = 2;
+  const pad = 5;
+  const gw = (w - pad * (cols + 1)) / cols;
+  const gh = (h - pad * (rows + 1)) / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const gx = x + pad + c * (gw + pad);
+      const gy = y + pad + r * (gh + pad);
+      ctx.fillStyle = '#eef8ff';
+      roundRect(gx, gy, gw, gh, 3);
+      ctx.fill();
+      // Chấm hàng hóa.
+      ctx.fillStyle = ['#ff7a59', '#7c3aed', '#22c55e', '#f59e0b'][(r * 2 + c) % 4];
+      ctx.beginPath();
+      ctx.arc(gx + gw / 2, gy + gh / 2, Math.min(gw, gh) * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawTopDownCheckout(x, y, w, h) {
+  ctx.fillStyle = 'rgba(31,58,70,.12)';
+  roundRect(x + 2, y + 3, w, h, 6);
   ctx.fill();
+  ctx.fillStyle = '#f0c94a';
+  roundRect(x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = '#a67c00';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  // Băng chuyền nhìn từ trên.
+  ctx.fillStyle = '#fff7d1';
+  roundRect(x + 6, y + h * 0.28, w - 12, h * 0.22, 4);
+  ctx.fill();
+  ctx.fillStyle = BRAND.colors.ink;
+  ctx.font = '800 11px "Baloo 2", system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PAY', x + w / 2, y + h * 0.68);
+}
 
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = 1.5;
+function drawTopDownStock(x, y, w, h) {
+  ctx.fillStyle = 'rgba(31,58,70,.12)';
+  roundRect(x + 2, y + 3, w, h, 6);
+  ctx.fill();
+  ctx.fillStyle = '#8b6b4a';
+  roundRect(x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = '#5c3f27';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.fillStyle = '#f0e2c8';
+  roundRect(x + w * 0.22, y + h * 0.22, w * 0.56, h * 0.56, 4);
+  ctx.fill();
+  ctx.strokeStyle = '#c4a57a';
   ctx.stroke();
 }
 
@@ -152,65 +170,62 @@ function drawBuilding(cell) {
   if (!cell.building) return;
   const t = GRID.tile;
   const p = gridToScreen(cell.x, cell.y, state.originX, state.originY);
-  const cx = p.x + t / 2;
-  const baseY = p.y + t - 10;
-
-  if (cell.building === 'shelf') {
-    drawBox25D(cx - 18, baseY - 8, 30, 8, 26, '#7ec2dd', '#3f7f9b', BRAND.colors.shelf, '#2b5f74');
-    ctx.fillStyle = '#f4fbff';
-    roundRect(cx - 13, baseY - 26, 9, 7, 2); ctx.fill();
-    roundRect(cx - 1, baseY - 26, 9, 7, 2); ctx.fill();
-    roundRect(cx - 13, baseY - 16, 9, 7, 2); ctx.fill();
-    roundRect(cx - 1, baseY - 16, 9, 7, 2); ctx.fill();
-  } else if (cell.building === 'checkout') {
-    drawBox25D(cx - 20, baseY - 6, 34, 8, 18, '#f3d56b', '#c79a1d', BRAND.colors.money, '#8d6a08');
-    ctx.fillStyle = BRAND.colors.ink;
-    ctx.font = '800 11px "Baloo 2", system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('PAY', cx - 1, baseY - 10);
-  } else if (cell.building === 'stockroom') {
-    drawBox25D(cx - 18, baseY - 8, 30, 9, 28, '#c4a07a', '#7a5738', '#8b6b4a', '#5c3f27');
-    ctx.fillStyle = '#f3e6cf';
-    roundRect(cx - 7, baseY - 18, 12, 12, 3); ctx.fill();
-  }
+  const x = p.x + 8;
+  const y = p.y + 8;
+  const w = t - 16;
+  const h = t - 16;
+  if (cell.building === 'shelf') drawTopDownShelf(x, y, w, h);
+  else if (cell.building === 'checkout') drawTopDownCheckout(x, y, w, h);
+  else if (cell.building === 'stockroom') drawTopDownStock(x, y, w, h);
 }
 
 function drawRoomFrame() {
   const t = GRID.tile;
-  const x = state.originX - 10;
-  const y = state.originY - 10;
-  const w = GRID.width * t + 20;
-  const h = GRID.height * t + 20;
-  ctx.fillStyle = 'rgba(255,253,247,.55)';
-  roundRect(x, y, w, h, 22);
+  const x = state.originX - 14;
+  const y = state.originY - 14;
+  const w = GRID.width * t + 28;
+  const h = GRID.height * t + 28;
+  ctx.fillStyle = '#fffdf8';
+  roundRect(x, y, w, h, 24);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(31,58,70,.12)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(31,58,70,.14)';
+  ctx.lineWidth = 2.5;
   ctx.stroke();
+
+  // Cửa vào phía dưới — dấu hiệu nhìn từ trên.
+  const doorW = t * 1.4;
+  const doorX = state.originX + (GRID.width * t - doorW) / 2;
+  const doorY = state.originY + GRID.height * t - 2;
+  ctx.fillStyle = '#9fd0e8';
+  roundRect(doorX, doorY, doorW, 12, 4);
+  ctx.fill();
+}
+
+function drawViewBadge() {
+  ctx.fillStyle = 'rgba(31,58,70,.82)';
+  roundRect(12, 96, 168, 28, 14);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '800 13px "Baloo 2", system-ui';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('NHÌN TỪ TRÊN XUỐNG', 24, 110);
 }
 
 function draw() {
   const w = innerWidth;
   const h = innerHeight;
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#c8ebf5');
+  g.addColorStop(0, '#bfe8f4');
   g.addColorStop(0.55, BRAND.colors.bg);
-  g.addColorStop(1, '#e7f6d8');
+  g.addColorStop(1, '#dff3c9');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
   drawRoomFrame();
-
-  // Vẽ sàn trước, công trình sau theo hàng để 2.5D chồng đúng.
   forEachCell(cells, drawFloorTile);
-  const list = [];
-  forEachCell(cells, cell => list.push(cell));
-  list.sort((a, b) => a.y - b.y || a.x - b.x);
-  for (const cell of list) drawBuilding(cell);
-
-  ctx.fillStyle = 'rgba(216,238,245,.55)';
-  ctx.fillRect(0, 0, w, 92);
+  forEachCell(cells, drawBuilding);
+  drawViewBadge();
 }
 
 function syncHud() {
