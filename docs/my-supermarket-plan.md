@@ -92,22 +92,21 @@ Backlog: C1, E1, E2, F1, G1 (phần tiền/tốc độ).
 
 ## Pha 3 — Xây lớn theo ô lưới
 
-**Trạng thái:** M3 đã có; M3b đang chờ duyệt trên điện thoại (icon + cửa).
+**Trạng thái:** M3c — mở vùng theo level (không unlock từng ô).
 
 **Mục tiêu:** chứng minh thesis prototype: muốn xây để map lớn hơn.
 
 Việc cần làm:
 
 1. [x] Nút **Xây**: chọn kệ/quầy → tap ô `empty`.
-2. [x] Nút **Mở ô**: `locked` kề vùng đã mở → trả tiền → `empty`.
-3. [x] Giá tăng dần theo tiến độ.
-4. [x] Store Level theo số ô/công trình.
-5. [x] Feedback rõ: map rộng hơn, toast lên cấp.
-6. [x] Dock/map dùng **icon minh họa** (không danh sách chữ phức tạp).
-7. [x] Khách **vào cửa → mua → xếp hàng thanh toán → ra cửa** rồi biến mất.
+2. [x] ~~Nút Mở ô từng ô~~ → **lên level tự động mở cả vùng** (`LEVEL_REGIONS`).
+3. [x] Store Level theo số công trình.
+4. [x] Feedback rõ: map bung vùng, toast lên cấp.
+5. [x] Dock/map dùng **icon minh họa**.
+6. [x] Khách **vào cửa → mua → xếp hàng → ra cửa**.
 
-**Đầu ra:** https://giangdao-vizion.github.io/cute-3d-heroes-demo/supermarket.html?v=m3b  
-**Tiêu chí xong:** trong ~90 giây, người chơi tự muốn mở rộng ít nhất 1 lần; nhìn icon hiểu xây gì; thấy khách đi vào/ra cửa.
+**Đầu ra:** https://giangdao-vizion.github.io/cute-3d-heroes-demo/supermarket.html?v=m3c  
+**Tiêu chí xong:** xây thêm công trình → lên cấp → vùng mới mở một lần, không tap từng ổ khóa.
 
 Backlog: B3, C2, C3, G2.
 

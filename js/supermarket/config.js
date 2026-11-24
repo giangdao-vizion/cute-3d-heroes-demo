@@ -19,21 +19,28 @@ export const BRAND = {
 export const GRID = {
   width: 8,
   height: 8,
-  // Sảnh rộng từ cửa dưới lên kệ — khách đi vào rõ ràng.
-  startOpen: [
-    [2, 2], [3, 2], [4, 2], [5, 2],
-    [2, 3], [3, 3], [4, 3], [5, 3],
-    [2, 4], [3, 4], [4, 4], [5, 4],
-    [2, 5], [3, 5], [4, 5], [5, 5],
-  ],
   tile: 58,
   view: 'topdown',
 };
 
+// Mỗi level mở nguyên một vùng (rect inclusive). Lên cấp → auto unlock vùng đó.
+export const LEVEL_REGIONS = {
+  1: { x0: 2, y0: 2, x1: 5, y1: 5 }, // 4×4 sảnh ban đầu
+  2: { x0: 1, y0: 1, x1: 6, y1: 6 }, // 6×6
+  3: { x0: 0, y0: 1, x1: 7, y1: 6 }, // gần full
+  4: { x0: 0, y0: 0, x1: 7, y1: 7 }, // full map
+};
+
+// Level theo số công trình (không tính cửa). Seed = 4 → Lv1.
+export const LEVEL_BUILD_THRESHOLDS = {
+  1: 0,
+  2: 6,  // +2 công trình so với seed
+  3: 8,
+  4: 10,
+};
+
 export const ECONOMY = {
   startMoney: 160,
-  unlockCellBase: 35,
-  unlockCellStep: 12,
   buildShelf: 50,
   buildCheckout: 75,
   buildStockroom: 65,
@@ -62,7 +69,7 @@ export const ICONS = {
 };
 
 export const PHASE = {
-  id: 'M3b',
-  title: 'Pha 3b — Icon + cửa vào/ra',
-  reviewNote: 'Khách vào cửa · mua · xếp hàng · ra cửa',
+  id: 'M3c',
+  title: 'Pha 3c — Mở vùng theo level',
+  reviewNote: 'Xây kệ/quầy để lên cấp · mở vùng tự động',
 };

@@ -35,7 +35,7 @@ Thu tiền:
 Prototype ưu tiên **xây lớn theo lưới**:
 
 1. Kiếm tiền (tap thu).
-2. Mở/unlock ô hoặc đặt công trình lên ô trống.
+2. Đặt công trình lên ô trống; lên level thì tự mở cả vùng (không unlock từng ô).
 3. Map isometric rộng/dày hơn ngay lập tức.
 4. Muốn mở tiếp vì còn ô khóa hoặc còn slot xây.
 

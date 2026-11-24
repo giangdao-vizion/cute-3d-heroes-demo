@@ -1,4 +1,5 @@
-import { GRID } from './config.js?v=m3b';
+import { GRID, LEVEL_REGIONS } from './config.js?v=m3c';
+import { applyOpenRegion } from './build.js?v=m3c';
 
 export function createGrid() {
   const cells = [];
@@ -9,9 +10,9 @@ export function createGrid() {
     }
     cells.push(row);
   }
-  for (const [x, y] of GRID.startOpen) {
-    if (cells[y]?.[x]) cells[y][x].state = 'empty';
-  }
+
+  // Lv1: mở cả vùng 4×4 (không từng ô).
+  applyOpenRegion(cells, 1);
 
   // Layout rõ lối vào: cửa dưới → sảnh → kệ → quầy bên trái.
   seed(cells, 3, 2, 'shelf', 10);
@@ -60,3 +61,5 @@ export function countByState(cells) {
   forEachCell(cells, cell => { out[cell.state] = (out[cell.state] || 0) + 1; });
   return out;
 }
+
+export { LEVEL_REGIONS };

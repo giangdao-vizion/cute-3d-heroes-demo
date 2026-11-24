@@ -1,11 +1,12 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE, ICONS } from './config.js?v=m3b';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, cellCenter } from './grid.js?v=m3b';
-import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m3b';
-import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m3b';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE, ICONS } from './config.js?v=m3c';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, cellCenter } from './grid.js?v=m3c';
+import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m3c';
+import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m3c';
 import {
-  canUnlock, canBuild, unlockCell, placeBuilding, unlockPrice, storeLevel,
-  refreshActorsBuildings, countOpened,
-} from './build.js?v=m3b';
+  canBuild, placeBuilding, storeLevel, nextLevelProgress,
+  applyOpenRegion, refreshActorsBuildings, countOpened, totalCells,
+  regionForLevel, cellInRegion,
+} from './build.js?v=m3c';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
@@ -17,7 +18,7 @@ const fx = createFx();
 const icons = {};
 for (const [key, src] of Object.entries(ICONS)) {
   const img = new Image();
-  img.src = `${src}?v=m3b`;
+  img.src = `${src}?v=m3c`;
   icons[key] = img;
 }
 
@@ -122,11 +123,10 @@ function drawFloorTile(cell) {
     fill = '#cfeaf4';
     stroke = '#7fb5c8';
   }
-  const buildOk = (state.mode === 'unlock' && canUnlock(cells, cell))
-    || ((state.mode === 'shelf' || state.mode === 'checkout') && canBuild(cell));
+  const buildOk = (state.mode === 'shelf' || state.mode === 'checkout') && canBuild(cell);
   if (buildOk) {
-    fill = state.mode === 'unlock' ? '#d9f7e8' : '#e7f0ff';
-    stroke = state.mode === 'unlock' ? '#1f8f6c' : '#4f9dff';
+    fill = '#e7f0ff';
+    stroke = '#4f9dff';
   }
   if (selected) {
     fill = '#ffe9a8';
@@ -143,9 +143,14 @@ function drawFloorTile(cell) {
   if (cell.state === 'locked') {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    if (state.mode === 'unlock' && canUnlock(cells, cell)) {
-      const ok = drawIcon(icons.unlock, cx - 16, cy - 16, 32);
-      if (!ok) drawPadlock(cx, cy, 16);
+    // Ô thuộc vùng level kế tiếp → icon mở khóa mờ (gợi ý lên cấp sẽ mở cả vùng).
+    const nextRegion = regionForLevel(state.level + 1);
+    const upcoming = cellInRegion(cell.x, cell.y, nextRegion)
+      && !cellInRegion(cell.x, cell.y, regionForLevel(state.level));
+    if (upcoming) {
+      ctx.globalAlpha = 0.55;
+      if (!drawIcon(icons.unlock, cx - 14, cy - 14, 28)) drawPadlock(cx, cy, 14);
+      ctx.globalAlpha = 1;
     } else {
       drawPadlock(cx, cy, 15);
     }
@@ -414,28 +419,53 @@ function setMode(mode) {
 }
 
 function syncDock() {
-  const price = unlockPrice(cells);
-  if ($('unlockPrice')) $('unlockPrice').textContent = `$${price}`;
-  $('btnUnlock')?.classList.toggle('on', state.mode === 'unlock');
   $('btnShelf')?.classList.toggle('on', state.mode === 'shelf');
   $('btnCheckout')?.classList.toggle('on', state.mode === 'checkout');
 }
 
-function syncHud() {
-  const opened = countOpened(cells);
-  const level = storeLevel(cells);
-  if (level > state.level) {
-    state.level = level;
-    showToast(`Lv ${level}!`);
-  } else {
-    state.level = level;
+function celebrateRegionUnlock(newly, level) {
+  if (!newly.length) return;
+  for (const cell of newly) {
+    const p = cellCenter(cell, state.originX, state.originY);
+    addSpark(fx, p.x, p.y, '#1f8f6c');
+    addRing(fx, p.x, p.y, 'rgba(31,143,108,.28)');
   }
+  const mid = newly[Math.floor(newly.length / 2)];
+  const c = cellCenter(mid, state.originX, state.originY);
+  addFloat(fx, c.x, c.y - 10, `Lv${level}`, '#1f8f6c');
+  showToast(`Lv ${level} · mở vùng mới!`);
+}
+
+function checkLevelUp() {
+  const level = storeLevel(cells);
+  if (level <= state.level) {
+    state.level = level;
+    return false;
+  }
+  // Lên từng bậc để mỗi vùng bung ra rõ ràng.
+  while (state.level < level) {
+    state.level += 1;
+    const newly = applyOpenRegion(cells, state.level);
+    celebrateRegionUnlock(newly, state.level);
+  }
+  refreshActorsBuildings(actors, cells);
+  return true;
+}
+
+function syncHud() {
+  checkLevelUp();
+  const opened = countOpened(cells);
+  const prog = nextLevelProgress(cells);
   $('money').textContent = `$${state.money}`;
-  $('stats').textContent = `Lv${level} · ${opened}/64`;
-  if (state.mode === 'unlock') $('hint').textContent = 'Chạm ổ khóa xanh để mở ô';
-  else if (state.mode === 'shelf') $('hint').textContent = 'Chạm ô trống để đặt kệ';
+  if (prog.done) {
+    $('stats').textContent = `Lv${prog.level} · ${opened}/${totalCells()}`;
+  } else {
+    $('stats').textContent = `Lv${prog.level} · ${prog.have}/${prog.need} → vùng`;
+  }
+  if (state.mode === 'shelf') $('hint').textContent = 'Chạm ô trống để đặt kệ';
   else if (state.mode === 'checkout') $('hint').textContent = 'Chạm ô trống để đặt quầy';
   else if (state.pendingMoney > 0) $('hint').textContent = 'Chạm đống vàng ở quầy để thu';
+  else if (!prog.done) $('hint').textContent = `Xây thêm ${prog.need - prog.have} để mở vùng Lv${prog.next}`;
   else $('hint').textContent = PHASE.reviewNote;
 }
 
@@ -443,20 +473,6 @@ function tryBuildOn(cell) {
   if (!cell || !state.mode) return false;
   if (cell.building === 'door') {
     showToast('Đây là cửa vào');
-    return true;
-  }
-  if (state.mode === 'unlock') {
-    const price = unlockPrice(cells);
-    if (state.money < price) { showToast('Không đủ tiền'); return true; }
-    const res = unlockCell(cells, cell);
-    if (!res.ok) { showToast(res.reason); return true; }
-    state.money -= res.price;
-    const p = cellCenter(cell, state.originX, state.originY);
-    addSpark(fx, p.x, p.y, '#1f8f6c');
-    addFloat(fx, p.x, p.y - 8, `−$${res.price}`, '#1f8f6c');
-    addRing(fx, p.x, p.y, 'rgba(31,143,108,.35)');
-    syncDock();
-    syncHud();
     return true;
   }
   if (state.mode === 'shelf' || state.mode === 'checkout') {
@@ -469,6 +485,7 @@ function tryBuildOn(cell) {
     const p = cellCenter(cell, state.originX, state.originY);
     addSpark(fx, p.x, p.y, state.mode === 'shelf' ? '#4f9dff' : '#e6b422');
     addRing(fx, p.x, p.y, 'rgba(79,157,255,.3)');
+    checkLevelUp();
     syncHud();
     return true;
   }
@@ -636,7 +653,6 @@ function boot() {
       $('speedBtn').textContent = `x${state.speed}`;
     };
   }
-  $('btnUnlock').onclick = () => setMode('unlock');
   $('btnShelf').onclick = () => setMode('shelf');
   $('btnCheckout').onclick = () => setMode('checkout');
   $('btnCancel').onclick = () => { state.mode = null; syncDock(); syncHud(); };

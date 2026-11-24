@@ -52,7 +52,7 @@
   #stats { font-size:13px; max-width:46vw; }
   #dock {
     position:absolute; left:10px; right:10px; bottom:calc(58px + env(safe-area-inset-bottom));
-    display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; pointer-events:auto;
+    display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; pointer-events:auto;
   }
   #dock button {
     min-height:64px; border:0; border-radius:18px; background:rgba(255,253,247,.96); color:var(--ms-ink);
@@ -82,12 +82,12 @@
 
   <div id="splash">
     <div class="splash-card">
-      <span class="phase" id="phaseTag">M3b</span>
+      <span class="phase" id="phaseTag">M3c</span>
       <h1 id="brandName">My Supermarket</h1>
       <p class="slogan" id="brandSlogan">Build your aisle empire.</p>
       <div class="sku-preview" id="skuPreview"></div>
       <button id="openBtn">Mở cửa</button>
-      <p class="note">Khách vào cửa · mua sắm · xếp hàng · ra cửa</p>
+      <p class="note">Xây để lên cấp · mở cả vùng tự động</p>
     </div>
   </div>
 
@@ -98,10 +98,6 @@
       <button class="pill" id="speedBtn" style="pointer-events:auto;border:0;cursor:pointer">x1</button>
     </div>
     <div id="dock">
-      <button id="btnUnlock" type="button" aria-label="Mở ô">
-        <img src="img/supermarket/icon-unlock.svg" alt="">
-        <span class="price" id="unlockPrice">$35</span>
-      </button>
       <button id="btnShelf" type="button" aria-label="Xây kệ">
         <img src="img/supermarket/icon-shelf.svg" alt="">
         <span class="price">$50</span>
@@ -115,11 +111,11 @@
         <span class="price">✓</span>
       </button>
     </div>
-    <div id="hint">Chạm icon rồi chạm map</div>
+    <div id="hint">Xây kệ/quầy để lên cấp</div>
     <div id="toast"></div>
   </div>
 </div>
 
-<script type="module" src="js/supermarket/main.js?v=m3b"></script>
+<script type="module" src="js/supermarket/main.js?v=m3c"></script>
 </body>
 </html>
