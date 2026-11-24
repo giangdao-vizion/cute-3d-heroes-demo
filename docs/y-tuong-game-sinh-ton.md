@@ -154,9 +154,15 @@ Căn cứ nằm giữa bản đồ và bị tấn công từ bốn đường. Ng
 
 Trang dự kiến: `four-fronts.html`.
 
-## 6. Ý tưởng mở rộng ngắn
+## 6. Siêu Thị Chibi (ý tưởng quản lý)
 
-Các ý tưởng sau mới ở mức mầm, chỉ nghiên cứu khi năm concept phía trên đã được đánh giá:
+Game quản lý siêu thị: khách đi lại giữa các quầy, người chơi mở rộng mặt bằng và chống tắc nghẽn. Không phải game sinh tồn; ghi ở đây để theo dõi chung backlog sảnh game.
+
+Đặc tả quyết định và tài nguyên: [`sieu-thi-quan-ly-design.md`](./sieu-thi-quan-ly-design.md).
+
+## 7. Ý tưởng mở rộng ngắn
+
+Các ý tưởng sau mới ở mức mầm, chỉ nghiên cứu khi các concept phía trên đã được đánh giá:
 
 - **Đảo Nhỏ Thu Hẹp:** mặt đất chìm dần, người chơi xây cầu tạm và tranh giành vùng an toàn với quái.
 - **Hang Động Độc:** khí độc dâng lên theo tầng; phải tìm cửa xuống trước khi hết không khí.
