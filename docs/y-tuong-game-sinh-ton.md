@@ -160,6 +160,7 @@ Game quản lý siêu thị brand riêng **My Supermarket**: idle-tap, isometric
 
 - Hướng đã chốt: [`sieu-thi-quan-ly-design.md`](./sieu-thi-quan-ly-design.md)
 - Backlog kỹ thuật: [`my-supermarket-backlog.md`](./my-supermarket-backlog.md)
+- Kế hoạch triển khai: [`my-supermarket-plan.md`](./my-supermarket-plan.md)
 
 ## 7. Ý tưởng mở rộng ngắn
 

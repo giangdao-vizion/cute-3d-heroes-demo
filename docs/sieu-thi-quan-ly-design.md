@@ -15,6 +15,7 @@ Tài liệu khóa quyết định sản phẩm trước khi làm prototype. Mụ
 | Hàng hóa | **Tồn kho chi tiết theo SKU** |
 | Trang | `supermarket.html` + `js/supermarket/` |
 | Backlog kỹ thuật | [`my-supermarket-backlog.md`](./my-supermarket-backlog.md) |
+| Kế hoạch triển khai | [`my-supermarket-plan.md`](./my-supermarket-plan.md) |
 
 ## 2. Cách đọc các quyết định cùng lúc
 
