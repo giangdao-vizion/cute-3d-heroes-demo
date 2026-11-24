@@ -1,7 +1,7 @@
-import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2';
-import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2';
-import { createActorsState, updateActors, drawCustomer } from './actors.js?v=m2';
-import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2';
+import { BRAND, GRID, ECONOMY, SKUS, PHASE } from './config.js?v=m2b';
+import { createGrid, gridToScreen, screenToGrid, forEachCell, countByState, cellCenter } from './grid.js?v=m2b';
+import { createActorsState, updateActors, drawCustomer, spawnCustomer } from './actors.js?v=m2b';
+import { createFx, addFloat, addSpark, addRing, updateFx, drawFx } from './fx.js?v=m2b';
 
 const $ = id => document.getElementById(id);
 const canvas = $('stage');
@@ -416,6 +416,10 @@ function openStore() {
   $('splash').classList.add('hidden');
   $('hud').classList.remove('hidden');
   centerMap();
+  // Spawn ngay 2 khách để thấy chuyển động từ giây đầu.
+  spawnCustomer(actors, cells);
+  spawnCustomer(actors, cells);
+  actors.spawnT = 1.2;
   syncHud();
 }
 
