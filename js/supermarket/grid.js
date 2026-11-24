@@ -1,19 +1,24 @@
-import { GRID } from './config.js?v=m3';
+import { GRID } from './config.js?v=m3b';
 
 export function createGrid() {
   const cells = [];
   for (let y = 0; y < GRID.height; y++) {
     const row = [];
-    for (let x = 0; x < GRID.width; x++) row.push({ x, y, state: 'locked', building: null, stock: 0, stockCap: 0, pulse: 0 });
+    for (let x = 0; x < GRID.width; x++) {
+      row.push({ x, y, state: 'locked', building: null, stock: 0, stockCap: 0, pulse: 0 });
+    }
     cells.push(row);
   }
   for (const [x, y] of GRID.startOpen) {
     if (cells[y]?.[x]) cells[y][x].state = 'empty';
   }
-  seed(cells, 3, 3, 'shelf', 10);
-  seed(cells, 4, 3, 'shelf', 10);
-  seed(cells, 3, 5, 'checkout');
-  seed(cells, 5, 4, 'stockroom');
+
+  // Layout rõ lối vào: cửa dưới → sảnh → kệ → quầy bên trái.
+  seed(cells, 3, 2, 'shelf', 10);
+  seed(cells, 4, 2, 'shelf', 10);
+  seed(cells, 5, 2, 'stockroom');
+  seed(cells, 2, 3, 'checkout');
+  seed(cells, 4, 5, 'door');
   return cells;
 }
 
@@ -29,10 +34,7 @@ function seed(cells, x, y, building, stock = 0) {
 }
 
 export function gridToScreen(x, y, originX, originY, tile = GRID.tile) {
-  return {
-    x: originX + x * tile,
-    y: originY + y * tile,
-  };
+  return { x: originX + x * tile, y: originY + y * tile };
 }
 
 export function screenToGrid(sx, sy, originX, originY, tile = GRID.tile) {

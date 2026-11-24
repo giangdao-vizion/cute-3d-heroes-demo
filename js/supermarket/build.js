@@ -1,4 +1,4 @@
-import { ECONOMY } from './config.js?v=m3';
+import { ECONOMY } from './config.js?v=m3b';
 
 export const BUILD_TYPES = [
   { id: 'shelf', label: 'Kệ', costKey: 'buildShelf', stock: 10, stockCap: 12 },
@@ -14,14 +14,13 @@ export function countOpened(cells) {
 
 export function countBuildings(cells) {
   let n = 0;
-  for (const row of cells) for (const c of row) if (c.building) n += 1;
+  for (const row of cells) for (const c of row) if (c.building && c.building !== 'door') n += 1;
   return n;
 }
 
 export function storeLevel(cells) {
   const opened = countOpened(cells);
   const buildings = countBuildings(cells);
-  // Bắt đầu Lv1 với 16 ô + layout mẫu; mỗi +4 ô hoặc +2 công trình tăng cấp.
   return 1
     + Math.floor(Math.max(0, opened - 16) / 4)
     + Math.floor(Math.max(0, buildings - 4) / 2);
@@ -78,4 +77,6 @@ export function placeBuilding(cell, typeId) {
 export function refreshActorsBuildings(actors, cells) {
   actors.shelves = cells.flat().filter(c => c.building === 'shelf');
   actors.checkout = cells.flat().find(c => c.building === 'checkout') || actors.checkout;
+  const door = cells.flat().find(c => c.building === 'door');
+  if (door) actors.door = { x: door.x, y: door.y };
 }

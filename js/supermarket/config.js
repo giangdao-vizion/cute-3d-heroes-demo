@@ -19,6 +19,7 @@ export const BRAND = {
 export const GRID = {
   width: 8,
   height: 8,
+  // Sảnh rộng từ cửa dưới lên kệ — khách đi vào rõ ràng.
   startOpen: [
     [2, 2], [3, 2], [4, 2], [5, 2],
     [2, 3], [3, 3], [4, 3], [5, 3],
@@ -51,8 +52,17 @@ export const SKUS = [
   { id: 'milk', name: 'Sữa', category: 'Fresh', cost: 4, price: 9, shelfCap: 8, popularity: 0.85, color: '#f8fafc' },
 ];
 
+export const ICONS = {
+  unlock: 'img/supermarket/icon-unlock.svg',
+  shelf: 'img/supermarket/icon-shelf.svg',
+  checkout: 'img/supermarket/icon-checkout.svg',
+  done: 'img/supermarket/icon-done.svg',
+  door: 'img/supermarket/icon-door.svg',
+  stock: 'img/supermarket/icon-stock.svg',
+};
+
 export const PHASE = {
-  id: 'M3',
-  title: 'Pha 3 — Xây lớn theo ô',
-  reviewNote: 'Mở ô khóa hoặc xây kệ/quầy để siêu thị lớn hơn',
+  id: 'M3b',
+  title: 'Pha 3b — Icon + cửa vào/ra',
+  reviewNote: 'Khách vào cửa · mua · xếp hàng · ra cửa',
 };

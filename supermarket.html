@@ -52,15 +52,18 @@
   #stats { font-size:13px; max-width:46vw; }
   #dock {
     position:absolute; left:10px; right:10px; bottom:calc(58px + env(safe-area-inset-bottom));
-    display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; pointer-events:auto;
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; pointer-events:auto;
   }
   #dock button {
-    min-height:52px; border:0; border-radius:16px; background:rgba(255,253,247,.96); color:var(--ms-ink);
-    font:800 12px/1.15 'Baloo 2', system-ui; box-shadow:0 6px 0 rgba(31,58,70,.12); cursor:pointer; padding:6px 4px;
+    min-height:64px; border:0; border-radius:18px; background:rgba(255,253,247,.96); color:var(--ms-ink);
+    font:800 11px/1 'Baloo 2', system-ui; box-shadow:0 6px 0 rgba(31,58,70,.12); cursor:pointer;
+    padding:8px 4px 6px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
   }
-  #dock button small { display:block; margin-top:2px; color:#6d8189; font-size:10px; }
+  #dock button img { width:36px; height:36px; display:block; pointer-events:none; }
+  #dock button .price { color:#6d8189; font-size:11px; font-weight:800; }
   #dock button.on { background:var(--ms-accent); color:#fff; box-shadow:0 6px 0 #146b50; }
-  #dock button.on small { color:rgba(255,255,255,.85); }
+  #dock button.on .price { color:rgba(255,255,255,.9); }
+  #dock button.on img { filter:brightness(1.05); }
   #hint {
     position:absolute; left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom));
     padding:8px 12px; border-radius:16px; background:rgba(31,58,70,.86); color:#fff; font-size:12px; font-weight:700; text-align:center;
@@ -79,12 +82,12 @@
 
   <div id="splash">
     <div class="splash-card">
-      <span class="phase" id="phaseTag">M3</span>
+      <span class="phase" id="phaseTag">M3b</span>
       <h1 id="brandName">My Supermarket</h1>
       <p class="slogan" id="brandSlogan">Build your aisle empire.</p>
       <div class="sku-preview" id="skuPreview"></div>
       <button id="openBtn">Mở cửa</button>
-      <p class="note">Bản M3: mở ô · xây kệ/quầy · siêu thị lớn dần</p>
+      <p class="note">Khách vào cửa · mua sắm · xếp hàng · ra cửa</p>
     </div>
   </div>
 
@@ -95,16 +98,28 @@
       <button class="pill" id="speedBtn" style="pointer-events:auto;border:0;cursor:pointer">x1</button>
     </div>
     <div id="dock">
-      <button id="btnUnlock" type="button">Mở ô<small id="unlockPrice">$35</small></button>
-      <button id="btnShelf" type="button">Kệ<small>$50</small></button>
-      <button id="btnCheckout" type="button">Quầy<small>$75</small></button>
-      <button id="btnCancel" type="button">Xong<small>thoát</small></button>
+      <button id="btnUnlock" type="button" aria-label="Mở ô">
+        <img src="img/supermarket/icon-unlock.svg" alt="">
+        <span class="price" id="unlockPrice">$35</span>
+      </button>
+      <button id="btnShelf" type="button" aria-label="Xây kệ">
+        <img src="img/supermarket/icon-shelf.svg" alt="">
+        <span class="price">$50</span>
+      </button>
+      <button id="btnCheckout" type="button" aria-label="Xây quầy">
+        <img src="img/supermarket/icon-checkout.svg" alt="">
+        <span class="price">$75</span>
+      </button>
+      <button id="btnCancel" type="button" aria-label="Xong">
+        <img src="img/supermarket/icon-done.svg" alt="">
+        <span class="price">✓</span>
+      </button>
     </div>
-    <div id="hint">Chọn Mở ô / Kệ / Quầy rồi chạm map</div>
+    <div id="hint">Chạm icon rồi chạm map</div>
     <div id="toast"></div>
   </div>
 </div>
 
-<script type="module" src="js/supermarket/main.js?v=m3"></script>
+<script type="module" src="js/supermarket/main.js?v=m3b"></script>
 </body>
 </html>

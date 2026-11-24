@@ -1,4 +1,4 @@
-import { GRID, SKUS } from './config.js?v=m3';
+import { GRID, SKUS } from './config.js?v=m3b';
 
 const PALETTES = [
   { body: '#5ea3c2', shirt: '#ff7a59', hair: '#2b2340' },
@@ -8,13 +8,15 @@ const PALETTES = [
 ];
 
 export function createActorsState(cells) {
+  const door = cells.flat().find(c => c.building === 'door') || { x: 4, y: 5 };
   return {
     customers: [],
-    spawnT: 0.6,
+    queue: [],
+    spawnT: 0.5,
     maxCustomers: 5,
     shelves: cells.flat().filter(c => c.building === 'shelf'),
     checkout: cells.flat().find(c => c.building === 'checkout'),
-    door: { x: 4, y: 5 },
+    door: { x: door.x, y: door.y },
   };
 }
 
@@ -29,6 +31,7 @@ function neighbors(cells, x, y) {
 }
 
 function findPath(cells, from, to) {
+  if (!to) return [from];
   if (from.x === to.x && from.y === to.y) return [from];
   const key = (x, y) => `${x},${y}`;
   const q = [{ x: from.x, y: from.y }];
@@ -43,10 +46,7 @@ function findPath(cells, from, to) {
       q.push({ x: nx, y: ny });
     }
   }
-  if (!prev.has(key(to.x, to.y))) {
-    // Không tới được: đi thẳng từng bước thô.
-    return [from, to];
-  }
+  if (!prev.has(key(to.x, to.y))) return [from, to];
   const path = [];
   let cur = { x: to.x, y: to.y };
   while (cur) {
@@ -60,13 +60,40 @@ function findPath(cells, from, to) {
 function pickShelf(actors) {
   const stocked = actors.shelves.filter(s => (s.stock ?? 0) > 0);
   const pool = stocked.length ? stocked : actors.shelves;
+  if (!pool.length) return null;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function queueSlots(actors, cells) {
+  const co = actors.checkout;
+  if (!co) return [];
+  // Hàng chờ hướng về cửa (xuống dưới), rồi sang phải/trái — chỉ ô trống/cửa.
+  const candidates = [
+    { x: co.x, y: co.y + 1 },
+    { x: co.x, y: co.y + 2 },
+    { x: co.x + 1, y: co.y + 1 },
+    { x: co.x - 1, y: co.y + 1 },
+    { x: co.x + 1, y: co.y },
+    { x: co.x - 1, y: co.y },
+  ];
+  return candidates.filter(s => {
+    const cell = cells[s.y]?.[s.x];
+    if (!cell || cell.state === 'locked') return false;
+    if (cell.building && cell.building !== 'door') return false;
+    return !(s.x === co.x && s.y === co.y);
+  });
+}
+
+function here(c) {
+  return { x: Math.round(c.x), y: Math.round(c.y) };
 }
 
 export function spawnCustomer(actors, cells) {
   if (actors.customers.length >= actors.maxCustomers) return null;
+  if (!actors.shelves.length || !actors.checkout || !actors.door) return null;
   const door = actors.door;
   const shelf = pickShelf(actors);
+  if (!shelf) return null;
   const palette = PALETTES[Math.floor(Math.random() * PALETTES.length)];
   const sku = SKUS[Math.floor(Math.random() * SKUS.length)];
   const c = {
@@ -74,33 +101,35 @@ export function spawnCustomer(actors, cells) {
     gx: door.x,
     gy: door.y,
     x: door.x,
-    y: door.y,
-    phase: 'toShelf',
-    path: findPath(cells, door, shelf),
+    y: door.y + 0.85, // đứng ngoài cửa rồi bước vào
+    phase: 'enter',
+    path: [{ x: door.x, y: door.y + 0.85 }, { x: door.x, y: door.y }],
     pathI: 0,
     wait: 0,
     basket: 0,
     sku,
     targetShelf: shelf,
+    queueSlot: null,
     palette,
     bob: Math.random() * Math.PI * 2,
     foot: 0,
+    alpha: 0,
   };
   actors.customers.push(c);
   return c;
 }
 
-function advancePath(c, dt, speed = 2.4) {
+function advancePath(c, dt, speed = 2.2) {
   if (!c.path || c.pathI >= c.path.length - 1) return true;
   const next = c.path[c.pathI + 1];
   const dx = next.x - c.x;
   const dy = next.y - c.y;
   const dist = Math.hypot(dx, dy);
-  if (dist < 0.04) {
+  if (dist < 0.05) {
     c.x = next.x;
     c.y = next.y;
-    c.gx = next.x;
-    c.gy = next.y;
+    c.gx = Math.round(next.x);
+    c.gy = Math.round(next.y);
     c.pathI += 1;
     return c.pathI >= c.path.length - 1;
   }
@@ -111,28 +140,62 @@ function advancePath(c, dt, speed = 2.4) {
   return false;
 }
 
+function joinQueue(actors, cells, c) {
+  if (!actors.queue.includes(c.id)) actors.queue.push(c.id);
+  const slots = queueSlots(actors, cells);
+  const idx = Math.max(0, actors.queue.indexOf(c.id));
+  c.queueSlot = slots[Math.min(idx, Math.max(0, slots.length - 1))] || {
+    x: actors.checkout.x,
+    y: actors.checkout.y + 1,
+  };
+  c.path = findPath(cells, here(c), c.queueSlot);
+  c.pathI = 0;
+  c.phase = 'toQueue';
+}
+
 export function updateActors(actors, cells, dt, hooks = {}) {
   actors.spawnT -= dt;
   if (actors.spawnT <= 0) {
     spawnCustomer(actors, cells);
-    actors.spawnT = 1.4 + Math.random() * 1.4;
+    actors.spawnT = 1.5 + Math.random() * 1.5;
   }
+
+  // Dọn queue nếu khách đã mất.
+  const live = new Set(actors.customers.map(c => c.id));
+  actors.queue = actors.queue.filter(id => live.has(id));
 
   for (const c of actors.customers) {
     c.bob += dt * 8;
-    if (c.phase === 'toShelf' || c.phase === 'toCheckout' || c.phase === 'leave') {
+    if (c.phase === 'enter') {
+      c.alpha = Math.min(1, (c.alpha || 0) + dt * 2.5);
+      if (advancePath(c, dt, 1.8)) {
+        c.alpha = 1;
+        c.targetShelf = pickShelf(actors);
+        c.path = findPath(cells, here(c), c.targetShelf);
+        c.pathI = 0;
+        c.phase = 'toShelf';
+        hooks.onEnter?.(c);
+      }
+    } else if (c.phase === 'toShelf' || c.phase === 'toQueue' || c.phase === 'toPay' || c.phase === 'leave') {
       const done = advancePath(c, dt);
       if (done) {
         if (c.phase === 'toShelf') {
           c.phase = 'shop';
           c.wait = 0.55;
           hooks.onArriveShelf?.(c);
-        } else if (c.phase === 'toCheckout') {
+        } else if (c.phase === 'toQueue') {
+          c.phase = 'waitQueue';
+        } else if (c.phase === 'toPay') {
           c.phase = 'pay';
-          c.wait = 0.45;
+          c.wait = 0.55;
           hooks.onArriveCheckout?.(c);
         } else if (c.phase === 'leave') {
-          c.phase = 'done';
+          c.phase = 'exit';
+          c.path = [
+            { x: actors.door.x, y: actors.door.y },
+            { x: actors.door.x, y: actors.door.y + 1.1 },
+          ];
+          c.pathI = 0;
         }
       }
     } else if (c.phase === 'shop') {
@@ -144,25 +207,44 @@ export function updateActors(actors, cells, dt, hooks = {}) {
           c.basket += 1;
           hooks.onTakeItem?.(c, shelf);
         }
-        // Có thể lấy thêm 1 món ở kệ khác hoặc đi trả tiền.
-        if (c.basket < 2 && Math.random() < 0.45) {
+        if (c.basket < 2 && Math.random() < 0.4) {
           c.targetShelf = pickShelf(actors);
-          c.path = findPath(cells, { x: Math.round(c.x), y: Math.round(c.y) }, c.targetShelf);
+          c.path = findPath(cells, here(c), c.targetShelf);
           c.pathI = 0;
           c.phase = 'toShelf';
         } else {
-          c.path = findPath(cells, { x: Math.round(c.x), y: Math.round(c.y) }, actors.checkout);
-          c.pathI = 0;
-          c.phase = 'toCheckout';
+          joinQueue(actors, cells, c);
         }
+      }
+    } else if (c.phase === 'waitQueue') {
+      const idx = actors.queue.indexOf(c.id);
+      const slots = queueSlots(actors, cells);
+      const slot = slots[Math.min(Math.max(idx, 0), Math.max(0, slots.length - 1))] || c.queueSlot;
+      if (slot && (Math.round(c.x) !== slot.x || Math.round(c.y) !== slot.y)) {
+        c.queueSlot = slot;
+        c.path = findPath(cells, here(c), slot);
+        c.pathI = 0;
+        c.phase = 'toQueue';
+      } else if (idx === 0) {
+        // Người đầu hàng vào quầy thanh toán.
+        c.path = findPath(cells, here(c), actors.checkout);
+        c.pathI = 0;
+        c.phase = 'toPay';
       }
     } else if (c.phase === 'pay') {
       c.wait -= dt;
       if (c.wait <= 0) {
         hooks.onPay?.(c);
-        c.path = findPath(cells, { x: Math.round(c.x), y: Math.round(c.y) }, actors.door);
+        actors.queue = actors.queue.filter(id => id !== c.id);
+        c.path = findPath(cells, here(c), actors.door);
         c.pathI = 0;
         c.phase = 'leave';
+      }
+    } else if (c.phase === 'exit') {
+      c.alpha = Math.max(0, (c.alpha ?? 1) - dt * 1.8);
+      if (advancePath(c, dt, 1.7) || c.alpha <= 0.05) {
+        c.phase = 'done';
+        hooks.onExit?.(c);
       }
     }
   }
@@ -172,15 +254,15 @@ export function updateActors(actors, cells, dt, hooks = {}) {
 export function drawCustomer(ctx, c, originX, originY, tile = GRID.tile) {
   const sx = originX + c.x * tile + tile / 2;
   const sy = originY + c.y * tile + tile / 2 + Math.sin(c.bob) * 1.5;
-  const moving = c.phase === 'toShelf' || c.phase === 'toCheckout' || c.phase === 'leave';
+  const moving = ['enter', 'toShelf', 'toQueue', 'toPay', 'leave', 'exit'].includes(c.phase);
+  ctx.save();
+  ctx.globalAlpha = c.alpha ?? 1;
 
-  // Bóng.
   ctx.fillStyle = 'rgba(31,58,70,.16)';
   ctx.beginPath();
   ctx.ellipse(sx, sy + 10, 10, 4.5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Thân nhìn từ trên: viên nang + đầu.
   ctx.fillStyle = c.palette.shirt;
   ctx.beginPath();
   ctx.ellipse(sx, sy + 2, 9, 11, 0, 0, Math.PI * 2);
@@ -194,14 +276,12 @@ export function drawCustomer(ctx, c, originX, originY, tile = GRID.tile) {
   ctx.arc(sx, sy - 7, 5.5, Math.PI * 1.1, Math.PI * 1.9);
   ctx.fill();
 
-  // Mắt.
   ctx.fillStyle = '#1f3a46';
   ctx.beginPath();
   ctx.arc(sx - 2.2, sy - 4, 1.1, 0, Math.PI * 2);
   ctx.arc(sx + 2.2, sy - 4, 1.1, 0, Math.PI * 2);
   ctx.fill();
 
-  // Giỏ hàng.
   if (c.basket > 0) {
     ctx.fillStyle = '#e6b422';
     ctx.fillRect(sx + 7, sy - 1, 7, 6);
@@ -211,15 +291,30 @@ export function drawCustomer(ctx, c, originX, originY, tile = GRID.tile) {
     ctx.fillText(String(c.basket), sx + 10.5, sy + 4);
   }
 
-  // Vệt bước chân khi đi.
+  if (c.phase === 'waitQueue') {
+    // Icon đồng hồ nhỏ = đang xếp hàng.
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(sx, sy - 16, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1f3a46';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - 16);
+    ctx.lineTo(sx, sy - 19);
+    ctx.moveTo(sx, sy - 16);
+    ctx.lineTo(sx + 3, sy - 15);
+    ctx.stroke();
+  }
+
   if (moving) {
-    const a = (c.foot % (Math.PI * 2));
-    ctx.globalAlpha = 0.25 + Math.sin(a) * 0.15;
+    const a = c.foot % (Math.PI * 2);
+    ctx.globalAlpha = (c.alpha ?? 1) * (0.25 + Math.sin(a) * 0.15);
     ctx.fillStyle = '#1f8f6c';
     ctx.beginPath();
     ctx.arc(sx - 5, sy + 12, 2.2, 0, Math.PI * 2);
     ctx.arc(sx + 5, sy + 12, 2.2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
   }
+  ctx.restore();
 }
